@@ -13,6 +13,7 @@ if (!root) {
 }
 
 const app = root
+const appHomeHref = import.meta.env.BASE_URL || '/'
 
 const questionIds = questions.map((question) => question.id)
 let answers: AnswerMap = loadAnswers(window.localStorage, questionIds)
@@ -142,7 +143,7 @@ function renderHeader(): string {
   const percent = Math.round((completed / questions.length) * 100)
   return `
     <header class="topbar">
-      <a class="brand" href="/" aria-label="MCTI 首页">
+      <a class="brand" href="${escapeHtml(appHomeHref)}" aria-label="MCTI 首页">
         <span class="brand-mark" aria-hidden="true"></span>
         <span>MCTI</span>
       </a>
