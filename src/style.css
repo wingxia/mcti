@@ -12,6 +12,9 @@
   --focus: #3b6756;
   --danger: #9b5f55;
   --shadow: 0 18px 42px rgba(55, 50, 42, 0.11);
+  --shadow-soft: 0 8px 22px rgba(55, 50, 42, 0.08);
+  --ease-snappy: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --motion-snappy: 165ms var(--ease-snappy);
   --font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 
   color: var(--ink);
@@ -33,6 +36,11 @@ body {
   min-width: 320px;
   min-height: 100svh;
   margin: 0;
+  background:
+    linear-gradient(115deg, rgba(141, 154, 164, 0.08), transparent 38%),
+    linear-gradient(rgba(47, 51, 47, 0.025) 1px, transparent 1px) 0 0 / 28px 28px,
+    linear-gradient(90deg, rgba(47, 51, 47, 0.018) 1px, transparent 1px) 0 0 / 28px 28px,
+    var(--paper);
 }
 
 button,
@@ -70,6 +78,7 @@ a {
   display: grid;
   grid-template-rows: auto auto 1fr auto;
   gap: 18px;
+  isolation: isolate;
 }
 
 .topbar {
@@ -99,6 +108,15 @@ a {
     var(--sage);
   border: 1px solid rgba(47, 51, 47, 0.22);
   border-radius: 5px;
+  box-shadow: inset 0 1px 0 rgba(255, 250, 241, 0.38);
+  transition:
+    border-color var(--motion-snappy),
+    transform var(--motion-snappy);
+}
+
+.brand:hover .brand-mark {
+  border-color: rgba(47, 51, 47, 0.34);
+  transform: translateY(-1px);
 }
 
 .progress-copy {
@@ -117,21 +135,48 @@ a {
 }
 
 .progress-track span {
+  position: relative;
   display: block;
   block-size: 100%;
-  background: var(--sage-deep);
-  transition: inline-size 180ms ease;
+  overflow: hidden;
+  background:
+    linear-gradient(90deg, transparent, rgba(255, 250, 241, 0.26), transparent),
+    var(--sage-deep);
+  box-shadow: inset 0 1px 0 rgba(255, 250, 241, 0.22);
+  transition: inline-size 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.progress-track span::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 250, 241, 0.32) 48%, transparent 100%);
+  content: "";
+  transform: translateX(-100%);
+  animation: progress-sheen 420ms ease-out;
 }
 
 .quiz-surface,
 .result-surface {
+  position: relative;
   align-self: center;
   inline-size: 100%;
   padding: 34px;
+  overflow: hidden;
   background: rgba(255, 250, 241, 0.78);
   border: 1px solid var(--line);
   border-radius: 8px;
   box-shadow: var(--shadow);
+  animation: surface-in 180ms var(--ease-snappy) both;
+}
+
+.quiz-surface::before,
+.result-surface::before {
+  position: absolute;
+  inset: 0 0 auto;
+  block-size: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 250, 241, 0.8), transparent);
+  content: "";
+  pointer-events: none;
 }
 
 .mob-preview {
@@ -151,6 +196,17 @@ a {
   object-fit: cover;
   object-position: center 42%;
   opacity: 0.78;
+  transform: scale(1.006);
+  transition:
+    filter 320ms ease,
+    opacity 320ms ease,
+    transform 520ms ease;
+}
+
+.quiz-surface:hover .mob-preview img {
+  filter: saturate(1.03);
+  opacity: 0.82;
+  transform: scale(1.012);
 }
 
 .eyebrow {
@@ -189,31 +245,86 @@ h2 {
 }
 
 .choice {
+  position: relative;
   min-block-size: 132px;
   padding: 18px;
   display: grid;
   grid-template-columns: 34px 1fr;
   align-items: start;
   gap: 14px;
+  overflow: hidden;
   color: var(--ink);
   text-align: left;
   background: #f7f1e8;
   border: 1px solid var(--line);
   border-radius: 8px;
+  box-shadow: inset 0 1px 0 rgba(255, 250, 241, 0.55);
   transition:
-    border-color 160ms ease,
-    background-color 160ms ease,
-    transform 160ms ease;
+    background-color var(--motion-snappy),
+    border-color var(--motion-snappy),
+    box-shadow var(--motion-snappy),
+    transform var(--motion-snappy);
+}
+
+.choice::before {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 22px 18px, rgba(255, 250, 241, 0.52), transparent 34px),
+    linear-gradient(135deg, rgba(255, 250, 241, 0.2), transparent 42%);
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--motion-snappy);
+}
+
+.choice::after {
+  position: absolute;
+  inset-block-start: 12px;
+  inset-inline-end: 12px;
+  inline-size: 7px;
+  block-size: 7px;
+  background: var(--sage-deep);
+  border-radius: 2px;
+  content: "";
+  opacity: 0;
+  transform: scale(0.7);
+  transition:
+    opacity var(--motion-snappy),
+    transform var(--motion-snappy);
+}
+
+.choice > span {
+  position: relative;
+  z-index: 1;
 }
 
 .choice:hover {
   border-color: var(--sage);
+  box-shadow: var(--shadow-soft), inset 0 1px 0 rgba(255, 250, 241, 0.7);
   transform: translateY(-1px);
+}
+
+.choice:hover::before {
+  opacity: 1;
+}
+
+.choice:active {
+  transform: translateY(0) scale(0.998);
 }
 
 .choice.is-selected {
   background: #e8ecdf;
   border-color: var(--sage-deep);
+  box-shadow:
+    0 10px 24px rgba(50, 72, 60, 0.11),
+    inset 0 0 0 1px rgba(89, 106, 93, 0.12);
+  transform: translateY(-1px);
+}
+
+.choice.is-selected::after {
+  opacity: 0.72;
+  transform: scale(1);
 }
 
 .choice-key {
@@ -226,6 +337,19 @@ h2 {
   border-radius: 6px;
   font-weight: 750;
   font-variant-numeric: tabular-nums;
+  box-shadow: inset 0 1px 0 rgba(255, 250, 241, 0.2);
+  transition:
+    background-color var(--motion-snappy),
+    box-shadow var(--motion-snappy),
+    transform var(--motion-snappy);
+}
+
+.choice.is-selected .choice-key {
+  background: var(--sage-deep);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 250, 241, 0.24),
+    0 0 0 3px rgba(89, 106, 93, 0.12);
+  transform: translateY(1px);
 }
 
 .actions {
@@ -237,12 +361,26 @@ h2 {
   gap: 14px;
 }
 
+.quiz-actions {
+  grid-template-columns: 128px 1fr;
+}
+
+.quiz-actions .inline-status {
+  text-align: end;
+}
+
 .primary,
 .ghost {
   min-block-size: 46px;
   padding: 0 18px;
   border-radius: 7px;
   font-weight: 720;
+  transition:
+    background-color var(--motion-snappy),
+    border-color var(--motion-snappy),
+    box-shadow var(--motion-snappy),
+    color var(--motion-snappy),
+    transform var(--motion-snappy);
 }
 
 .primary {
@@ -253,6 +391,7 @@ h2 {
 
 .primary:hover {
   background: #26392f;
+  box-shadow: 0 7px 16px rgba(38, 57, 47, 0.16);
 }
 
 .primary:disabled {
@@ -269,6 +408,13 @@ h2 {
 
 .ghost:hover {
   background: #edf0e6;
+  border-color: var(--sage-deep);
+  box-shadow: 0 6px 14px rgba(89, 106, 93, 0.09);
+}
+
+.primary:active,
+.ghost:active {
+  transform: translateY(1px);
 }
 
 .ghost:disabled {
@@ -284,6 +430,10 @@ h2 {
   text-align: center;
 }
 
+.inline-status:not(:empty) {
+  animation: status-in 180ms ease-out both;
+}
+
 .reset-link {
   justify-self: center;
   min-block-size: 38px;
@@ -291,10 +441,14 @@ h2 {
   color: var(--muted);
   background: transparent;
   border: 0;
+  transition:
+    color var(--motion-snappy),
+    transform var(--motion-snappy);
 }
 
 .reset-link:hover {
   color: var(--ink);
+  transform: translateY(-1px);
 }
 
 .result-surface {
@@ -336,6 +490,7 @@ h2 {
   border-radius: 999px;
   font-size: 0.9rem;
   font-weight: 680;
+  box-shadow: inset 0 1px 0 rgba(255, 250, 241, 0.45);
 }
 
 .result-meta {
@@ -372,10 +527,18 @@ h2 {
   background: #f7f1e8;
   border: 1px solid var(--line);
   border-radius: 7px;
+  transition:
+    background-color var(--motion-snappy),
+    border-color var(--motion-snappy),
+    box-shadow var(--motion-snappy),
+    transform var(--motion-snappy);
 }
 
 .alternatives a:hover {
+  background: #fbf6ed;
   border-color: var(--sage);
+  box-shadow: var(--shadow-soft);
+  transform: translateY(-1px);
 }
 
 .result-actions {
@@ -429,13 +592,55 @@ h2 {
     grid-template-columns: 1fr;
   }
 
+  .quiz-actions {
+    grid-template-columns: 1fr;
+  }
+
   .inline-status {
     order: -1;
+  }
+
+  .quiz-actions .inline-status {
+    text-align: center;
   }
 
   .primary,
   .ghost {
     inline-size: 100%;
+  }
+}
+
+@keyframes surface-in {
+  from {
+    opacity: 0.92;
+    transform: translateY(3px) scale(0.998);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes progress-sheen {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(120%);
+  }
+}
+
+@keyframes status-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
@@ -447,5 +652,13 @@ h2 {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+  }
+
+  .choice,
+  .mob-preview img,
+  .quiz-surface,
+  .result-surface,
+  .alternatives a {
+    transform: none !important;
   }
 }

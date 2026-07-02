@@ -19,6 +19,9 @@ let answers: AnswerMap = loadAnswers(window.localStorage, questionIds)
 let currentIndex = Math.min(firstUnansweredIndex(), questions.length - 1)
 let resultMode = allAnswered()
 let transientMessage = ''
+let pendingAdvanceTimer: number | undefined
+
+const AUTO_ADVANCE_DELAY_MS = 170
 
 const escapeHtml = (value: string): string =>
   value
@@ -55,18 +58,16 @@ function visibleTraits(traits: TraitVector): string[] {
     .map(([key]) => TRAIT_LABELS[key] ?? key)
 }
 
-function setAnswer(choice: 'a' | 'b'): void {
-  const question = questions[currentIndex]
-  answers = { ...answers, [question.id]: choice }
-  saveAnswers(window.localStorage, answers)
-  transientMessage = ''
-  render()
+function clearPendingAdvance(): void {
+  if (pendingAdvanceTimer !== undefined) {
+    window.clearTimeout(pendingAdvanceTimer)
+    pendingAdvanceTimer = undefined
+  }
 }
 
-function goNext(): void {
-  if (!answers[questions[currentIndex].id]) {
-    transientMessage = '先选一个更接近你的反应。'
-    render()
+function advanceFromQuestion(questionId: string): void {
+  const question = questions[currentIndex]
+  if (question.id !== questionId || !answers[questionId]) {
     return
   }
   if (currentIndex < questions.length - 1) {
@@ -82,7 +83,38 @@ function goNext(): void {
   }
 }
 
+function queueAutoAdvance(questionId: string): void {
+  clearPendingAdvance()
+  pendingAdvanceTimer = window.setTimeout(() => {
+    pendingAdvanceTimer = undefined
+    advanceFromQuestion(questionId)
+  }, AUTO_ADVANCE_DELAY_MS)
+}
+
+function setAnswer(choice: 'a' | 'b', autoAdvance = false): void {
+  clearPendingAdvance()
+  const question = questions[currentIndex]
+  answers = { ...answers, [question.id]: choice }
+  saveAnswers(window.localStorage, answers)
+  transientMessage = ''
+  render()
+  if (autoAdvance) {
+    queueAutoAdvance(question.id)
+  }
+}
+
+function goNext(): void {
+  clearPendingAdvance()
+  if (!answers[questions[currentIndex].id]) {
+    transientMessage = '先选一个更接近你的反应。'
+    render()
+    return
+  }
+  advanceFromQuestion(questions[currentIndex].id)
+}
+
 function goBack(): void {
+  clearPendingAdvance()
   if (resultMode) {
     resultMode = false
     currentIndex = questions.length - 1
@@ -95,6 +127,7 @@ function goBack(): void {
 }
 
 function restart(): void {
+  clearPendingAdvance()
   answers = {}
   currentIndex = 0
   resultMode = false
@@ -151,12 +184,9 @@ function renderQuestion(): void {
             )
             .join('')}
         </div>
-        <div class="actions">
+        <div class="actions quiz-actions">
           <button class="ghost" type="button" data-action="back" ${currentIndex === 0 ? 'disabled' : ''}>返回</button>
           <p class="inline-status" aria-live="polite">${escapeHtml(transientMessage)}</p>
-          <button class="primary" type="button" data-action="next" ${selected ? '' : 'disabled'}>
-            ${questionNumber === questions.length ? '查看结果' : '下一题'}
-          </button>
         </div>
       </section>
       <button class="reset-link" type="button" data-action="restart">重做</button>
@@ -271,7 +301,7 @@ function renderSharedResult(profile: MobProfile): void {
 
 function bindQuestionEvents(): void {
   app.querySelectorAll<HTMLButtonElement>('[data-answer]').forEach((button) => {
-    button.addEventListener('click', () => setAnswer(button.dataset.answer === 'a' ? 'a' : 'b'))
+    button.addEventListener('click', () => setAnswer(button.dataset.answer === 'a' ? 'a' : 'b', true))
   })
   bindCommonEvents()
 }
@@ -315,9 +345,9 @@ function render(): void {
 
 window.addEventListener('keydown', (event) => {
   if (event.key === '1') {
-    setAnswer('a')
+    setAnswer('a', true)
   } else if (event.key === '2') {
-    setAnswer('b')
+    setAnswer('b', true)
   } else if (event.key === 'ArrowLeft') {
     goBack()
   } else if (event.key === 'ArrowRight' || event.key === 'Enter') {
