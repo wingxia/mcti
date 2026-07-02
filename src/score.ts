@@ -94,14 +94,6 @@ export const answerPathForMob = (
 ): AnswerMap => {
   const answers: AnswerMap = {}
   for (const question of sourceQuestions) {
-    if (question.id === `mob-${target.code}`) {
-      answers[question.id] = 'a'
-      continue
-    }
-    if (question.id.startsWith('mob-')) {
-      answers[question.id] = 'b'
-      continue
-    }
     const [first, second] = question.options
     answers[question.id] = optionDot(first, target) >= optionDot(second, target) ? 'a' : 'b'
   }

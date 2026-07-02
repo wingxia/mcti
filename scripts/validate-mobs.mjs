@@ -1,4 +1,4 @@
-const SOURCE_REVISION = 1391244
+const SOURCE_REVISION = 1395881
 const EXPECTED_CODES = [
   'Allay',
   'Armor Stand',

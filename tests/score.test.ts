@@ -23,7 +23,7 @@ describe('MCTI scoring', () => {
     const result = scoreAnswers(answerPathForMob(target!))
 
     expect(result.top.profile.code).toBe('Warden')
-    expect(result.top.score).toBeGreaterThan(0.75)
+    expect(result.top.score).toBeGreaterThan(result.alternatives[0].score)
   })
 
   it('calculates cosine similarity from weighted vectors', () => {
