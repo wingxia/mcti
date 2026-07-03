@@ -27,6 +27,11 @@ const hashValue = (value: string): number => {
     hash ^= value.charCodeAt(index)
     hash = Math.imul(hash, 16777619)
   }
+  hash ^= hash >>> 16
+  hash = Math.imul(hash, 0x7feb352d)
+  hash ^= hash >>> 15
+  hash = Math.imul(hash, 0x846ca68b)
+  hash ^= hash >>> 16
   return hash >>> 0
 }
 
@@ -34,7 +39,7 @@ const traitScore = (profile: MobProfile, vector: TraitVector): number =>
   Object.entries(vector).reduce((total, [key, value]) => total + (profile.traits[key] ?? 0) * value, 0)
 
 const behaviorQuirk = (profile: MobProfile, question: QuestionBlueprint, side: 'a' | 'b'): number =>
-  ((hashValue(`${profile.code}:${question.id}:${side}`) % 2001) / 2000 - 0.5) * 0.9
+  ((hashValue(`${profile.code}:${question.id}:${side}`) % 2001) / 2000 - 0.5) * 6
 
 const alignedSide = (profile: MobProfile, question: QuestionBlueprint): 'a' | 'b' => {
   const [first, second] = question.options
@@ -50,9 +55,7 @@ const withAffinityWeights = (
 ): TraitVector => {
   const next: TraitVector = { ...baseWeights }
   for (const profile of mobProfiles) {
-    if (alignedSide(profile, question) === side) {
-      next[affinityKey(profile.code)] = 1.45
-    }
+    next[affinityKey(profile.code)] = alignedSide(profile, question) === side ? 1.45 : -1.45
   }
   return next
 }
@@ -69,10 +72,10 @@ const buildQuestion = (question: QuestionBlueprint): Question => ({
 const questionBlueprints: readonly QuestionBlueprint[] = [
   {
     id: 'q01-lost-spark',
-    prompt: '路边掉着一颗会发光的小东西，你第一反应是？',
+    prompt: '别人掉下一个小物件，你更像哪种反应？',
     options: [
       {
-        label: '捡起来问一圈，努力把它送回主人手里。',
+        label: '像悦灵一样捡起同类物品，尽量送回需要的人身边。',
         weights: weights([
           ['loyalty', 1],
           ['social', 0.8],
@@ -81,7 +84,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '先记下位置和线索，弄清它为什么会在这里。',
+        label: '像嗅探兽一样先闻线索，弄清它从哪里来。',
         weights: weights([
           ['curiosity', 1],
           ['caution', 0.6],
@@ -93,10 +96,10 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
   },
   {
     id: 'q02-cave-sound',
-    prompt: '洞穴深处传来奇怪的响动，你会怎么做？',
+    prompt: '洞穴里忽然传出细小声响，你会怎么处理？',
     options: [
       {
-        label: '轻手轻脚靠近一点，看看是不是新发现。',
+        label: '像蝙蝠或洞穴蜘蛛一样轻轻靠近，先看黑暗里有什么。',
         weights: weights([
           ['curiosity', 1],
           ['stealth', 0.8],
@@ -104,7 +107,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '先插好火把和路标，确认退路再继续。',
+        label: '像监守者会在意振动那样，先控住脚步和退路。',
         weights: weights([
           ['caution', 1],
           ['order', 0.8],
@@ -115,10 +118,10 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
   },
   {
     id: 'q03-slow-friend',
-    prompt: '同伴走得慢，队伍快要错过时间了。',
+    prompt: '同行的人走得慢，队伍快错过时间了。',
     options: [
       {
-        label: '放慢节奏，想办法让大家一起到。',
+        label: '像骆驼能载两个人一样，放慢节奏带大家一起过。',
         weights: weights([
           ['social', 1],
           ['nurture', 0.9],
@@ -127,7 +130,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '先去前面探路，把安全路线带回来。',
+        label: '像马或兔子先跑一段探路，再把安全路线带回来。',
         weights: weights([
           ['mobility', 1],
           ['independence', 0.8],
@@ -139,10 +142,10 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
   },
   {
     id: 'q04-small-base',
-    prompt: '新基地只有一小块空地，你最想先做什么？',
+    prompt: '新基地只剩一小块地方，你先安排什么？',
     options: [
       {
-        label: '把箱子、床和工具排整齐，住起来安心。',
+        label: '像盔甲架和村民工作站一样，把床、箱子、工具摆清楚。',
         weights: weights([
           ['order', 1],
           ['resource', 0.8],
@@ -150,7 +153,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '留出活动空间，方便以后随时改造。',
+        label: '像末影人搬方块那样，先留出以后改动的空间。',
         weights: weights([
           ['mobility', 0.9],
           ['curiosity', 0.7],
@@ -161,10 +164,10 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
   },
   {
     id: 'q05-argument',
-    prompt: '朋友之间为了路线吵起来了，你更像哪种处理方式？',
+    prompt: '朋友为了走哪条路线争起来了。',
     options: [
       {
-        label: '站出来定一个方向，先让局面动起来。',
+        label: '像铁傀儡站出来护村一样，先定一个能行动的方向。',
         weights: weights([
           ['order', 0.8],
           ['aggression', 0.7],
@@ -173,7 +176,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '把两边想法都听完，再悄悄补上缺的线索。',
+        label: '像海豚领路前会看水流一样，先听完两边线索。',
         weights: weights([
           ['patience', 1],
           ['social', 0.7],
@@ -185,10 +188,10 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
   },
   {
     id: 'q06-rainy-night',
-    prompt: '雨夜出门，路上湿漉漉的，你会带什么心情？',
+    prompt: '雨夜出门，路面湿漉漉的。',
     options: [
       {
-        label: '喜欢这种水汽和安静，慢慢走也可以。',
+        label: '像鱿鱼和鲑鱼适应水流一样，喜欢水汽里的慢节奏。',
         weights: weights([
           ['aquatic', 1],
           ['patience', 0.7],
@@ -196,7 +199,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '雨声正好遮住脚步，快点把事办完。',
+        label: '像狐狸夜行一样，借雨声遮住脚步，快点办完事。',
         weights: weights([
           ['mobility', 0.9],
           ['stealth', 0.8],
@@ -207,10 +210,10 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
   },
   {
     id: 'q07-surprise-guest',
-    prompt: '突然有人闯进你的节奏里，你会？',
+    prompt: '突然有人闯进你的节奏里。',
     options: [
       {
-        label: '先观察对方有没有危险，再决定靠不靠近。',
+        label: '像豹猫被靠近时会保持距离，先判断对方有没有危险。',
         weights: weights([
           ['caution', 1],
           ['stealth', 0.6],
@@ -218,7 +221,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '直接打招呼，看看能不能一起做点事。',
+        label: '像流浪商人开摊一样，直接打招呼看看能不能合作。',
         weights: weights([
           ['social', 1],
           ['trade', 0.6],
@@ -229,10 +232,10 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
   },
   {
     id: 'q08-valuable-map',
-    prompt: '你拿到一张可能很有价值的地图。',
+    prompt: '你拿到一张可能通向宝藏的地图。',
     options: [
       {
-        label: '先保管好，等关键时刻再拿出来用。',
+        label: '像驴或骡会带箱子一样，先把重要线索稳稳保管。',
         weights: weights([
           ['resource', 1],
           ['caution', 0.7],
@@ -240,7 +243,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '马上沿着线索出发，地图就是用来冒险的。',
+        label: '像海豚带人找沉船宝藏一样，马上沿线索出发。',
         weights: weights([
           ['curiosity', 1],
           ['mobility', 0.8],
@@ -251,10 +254,10 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
   },
   {
     id: 'q09-thin-bridge',
-    prompt: '面前是一座窄窄的桥，下面很深。',
+    prompt: '面前是一座很窄的桥，下面很深。',
     options: [
       {
-        label: '一步一步稳住呼吸，慢慢过。',
+        label: '像海龟回海滩那样，一步一步慢慢过也没关系。',
         weights: weights([
           ['caution', 1],
           ['patience', 0.9],
@@ -262,7 +265,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '看准角度，一口气冲过去。',
+        label: '像山羊或旋风人那样看准角度，一下跨过去。',
         weights: weights([
           ['mobility', 1],
           ['spectacle', 0.5],
@@ -273,10 +276,10 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
   },
   {
     id: 'q10-group-treasure',
-    prompt: '大家找到一箱宝物，你会先关心？',
+    prompt: '大家找到一箱战利品，你先关心什么？',
     options: [
       {
-        label: '怎么公平分配，别让谁心里不舒服。',
+        label: '像村民交易一样，把分配规则说清楚，别让谁吃亏。',
         weights: weights([
           ['order', 1],
           ['social', 0.7],
@@ -284,7 +287,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '哪些东西最稀有，怎么留到以后发挥作用。',
+        label: '像猪灵看重金子一样，先判断哪些东西最稀有。',
         weights: weights([
           ['resource', 1],
           ['curiosity', 0.5],
@@ -295,10 +298,10 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
   },
   {
     id: 'q11-noisy-crowd',
-    prompt: '人很多、声音很杂，你更想躲到哪里？',
+    prompt: '周围人很多、声音很杂，你会想躲到哪儿？',
     options: [
       {
-        label: '找个角落安静待着，等噪音过去。',
+        label: '像蝙蝠倒挂在暗处一样，找个安静角落等噪音过去。',
         weights: weights([
           ['stealth', 1],
           ['independence', 0.8],
@@ -306,7 +309,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '站到能看清全局的位置，帮大家排队。',
+        label: '像铁傀儡守村口一样，站到能看清全局的位置。',
         weights: weights([
           ['order', 0.9],
           ['social', 0.7],
@@ -320,7 +323,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '你负责照看一小片刚种下的植物。',
     options: [
       {
-        label: '每天看一眼，慢慢等它长好。',
+        label: '像蜜蜂采花授粉一样，每天照看一点，慢慢等它长好。',
         weights: weights([
           ['nurture', 1],
           ['patience', 0.9],
@@ -328,7 +331,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '想试试不同种法，看哪种变化最快。',
+        label: '像嗅探兽寻找古种子一样，想试试不同种法。',
         weights: weights([
           ['curiosity', 1],
           ['resource', 0.6],
@@ -342,7 +345,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '你发现自己走错路了。',
     options: [
       {
-        label: '立刻回头，别把错误滚大。',
+        label: '像村民按作息回村一样，立刻回头别把错误滚大。',
         weights: weights([
           ['caution', 0.9],
           ['order', 0.7],
@@ -350,7 +353,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '既然来了，就顺便看看这条路有什么。',
+        label: '像末影人偶尔搬起方块一样，既然来了就顺便探索。',
         weights: weights([
           ['curiosity', 1],
           ['independence', 0.7],
@@ -364,7 +367,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '墙上有一扇半掩的小门。',
     options: [
       {
-        label: '悄悄打开一条缝，先看看里面。',
+        label: '像猫或豹猫一样悄悄靠近，先从门缝看一眼。',
         weights: weights([
           ['stealth', 1],
           ['curiosity', 0.8],
@@ -372,7 +375,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '敲门说明来意，不想吓到里面的人。',
+        label: '像村民进屋前有规矩一样，敲门说明来意。',
         weights: weights([
           ['social', 0.8],
           ['order', 0.6],
@@ -386,7 +389,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '危险突然贴近，时间只够反应一下。',
     options: [
       {
-        label: '挡在前面，先把别人护住。',
+        label: '像狼和铁傀儡一样挡在前面，先护住同伴。',
         weights: weights([
           ['protection', 1],
           ['loyalty', 0.8],
@@ -394,7 +397,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '迅速拉开距离，找机会反制。',
+        label: '像兔子或猫一样迅速拉开距离，再找机会反制。',
         weights: weights([
           ['mobility', 1],
           ['caution', 0.6],
@@ -405,10 +408,10 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
   },
   {
     id: 'q16-stage-light',
-    prompt: '如果必须让所有人注意到一件事，你会？',
+    prompt: '如果必须让所有人注意到一件事。',
     options: [
       {
-        label: '做得醒目一点，让它一下子被看见。',
+        label: '像苦力怕爆点或恶魂火球一样，做得醒目到无法忽略。',
         weights: weights([
           ['spectacle', 1],
           ['aggression', 0.5],
@@ -416,7 +419,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '把线索摆清楚，让人自然发现它重要。',
+        label: '像潜影贝守城一样，把线索摆清楚，让人自然发现。',
         weights: weights([
           ['order', 0.9],
           ['patience', 0.7],
@@ -427,10 +430,10 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
   },
   {
     id: 'q17-snack-choice',
-    prompt: '背包只能带一种小零食。',
+    prompt: '背包只能带一种路上小补给。',
     options: [
       {
-        label: '带耐放、能救急的，实用最重要。',
+        label: '像牛、羊提供稳定资源一样，带耐放又能救急的。',
         weights: weights([
           ['resource', 1],
           ['caution', 0.6],
@@ -438,7 +441,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '带大家都爱分着吃的，路上开心一点。',
+        label: '像猪跟着胡萝卜一样，带大家都愿意分着吃的。',
         weights: weights([
           ['social', 0.9],
           ['nurture', 0.7],
@@ -452,7 +455,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '面前是一片很安静的湖。',
     options: [
       {
-        label: '想在水边待久一点，听听水声。',
+        label: '像鳕鱼和鲑鱼在水里成群游动，想多待一会儿听水声。',
         weights: weights([
           ['aquatic', 1],
           ['patience', 0.7],
@@ -460,7 +463,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '想绕湖走一圈，看看岸边藏着什么。',
+        label: '像海豚绕着遗迹领路一样，想沿岸找隐藏线索。',
         weights: weights([
           ['curiosity', 0.9],
           ['mobility', 0.7],
@@ -474,7 +477,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '临时小游戏开始了，但规则还没说完。',
     options: [
       {
-        label: '先听完规则，玩起来才公平。',
+        label: '像村民职业规则一样，先听完再玩才公平。',
         weights: weights([
           ['order', 1],
           ['patience', 0.7],
@@ -482,7 +485,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '边玩边懂，试错也很好玩。',
+        label: '像铜傀儡按按钮一样，边试边懂也很好玩。',
         weights: weights([
           ['mischief', 1],
           ['curiosity', 0.8],
@@ -496,7 +499,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '有件小事交给你一个人处理。',
     options: [
       {
-        label: '很好，我可以按自己的节奏悄悄做完。',
+        label: '像猫或末影人一样，按自己的节奏悄悄做完。',
         weights: weights([
           ['independence', 1],
           ['stealth', 0.7],
@@ -504,7 +507,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '我会先问清大家期待，别做偏了。',
+        label: '像狼跟随主人一样，先问清大家期待再行动。',
         weights: weights([
           ['social', 0.8],
           ['order', 0.7],
@@ -518,7 +521,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '最顺手的工具突然坏了。',
     options: [
       {
-        label: '先修好它，熟悉的东西值得维护。',
+        label: '像铁傀儡守住村庄一样，先修熟悉可靠的东西。',
         weights: weights([
           ['loyalty', 0.8],
           ['patience', 0.8],
@@ -526,7 +529,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '换个办法也行，正好试试新路线。',
+        label: '像旋风人改变战场一样，换个办法也许更快。',
         weights: weights([
           ['curiosity', 0.9],
           ['mobility', 0.7],
@@ -540,7 +543,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '你走进一个没见过的小集市。',
     options: [
       {
-        label: '先看看谁在交换什么，找找合适的交易。',
+        label: '像村民或猪灵一样，先看交换规则和货物价值。',
         weights: weights([
           ['trade', 1],
           ['resource', 0.8],
@@ -548,7 +551,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '先看路、出口和人群动线，心里有底。',
+        label: '像豹猫进陌生地方一样，先看出口、人群和动线。',
         weights: weights([
           ['caution', 0.9],
           ['order', 0.8],
@@ -559,10 +562,10 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
   },
   {
     id: 'q23-messy-room',
-    prompt: '房间乱得像刚被风吹过。',
+    prompt: '房间乱得像被劫掠兽冲过。',
     options: [
       {
-        label: '从分类开始，把东西归位。',
+        label: '像盔甲架陈列装备一样，从分类开始把东西归位。',
         weights: weights([
           ['order', 1],
           ['patience', 0.7],
@@ -570,7 +573,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '先找最重要的东西，其他慢慢说。',
+        label: '像狐狸叼走目标一样，先找最重要的东西。',
         weights: weights([
           ['resource', 0.8],
           ['curiosity', 0.6],
@@ -581,10 +584,10 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
   },
   {
     id: 'q24-morning-plan',
-    prompt: '新的一天开始，你更喜欢？',
+    prompt: '新的一天开始，你更喜欢哪种节奏？',
     options: [
       {
-        label: '先列一个小计划，今天就不乱跑。',
+        label: '像村民按职业上工一样，先列小计划。',
         weights: weights([
           ['order', 1],
           ['patience', 0.5],
@@ -592,7 +595,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '先出门看看，计划可以在路上长出来。',
+        label: '像蝙蝠飞出洞穴一样，先出门看看，计划路上再长出来。',
         weights: weights([
           ['curiosity', 1],
           ['mobility', 0.8],
@@ -606,7 +609,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '今晚轮到你守夜。',
     options: [
       {
-        label: '安静巡逻，任何动静都不放过。',
+        label: '像猫驱离幻翼和苦力怕一样，安静巡逻不放过动静。',
         weights: weights([
           ['protection', 0.9],
           ['caution', 0.8],
@@ -614,7 +617,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '坐在高处看全局，关键时刻再出手。',
+        label: '像潜影贝守在末地城一样，坐在高处等关键时刻。',
         weights: weights([
           ['patience', 0.9],
           ['order', 0.6],
@@ -628,7 +631,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '大家有点没精神，你想让气氛变好。',
     options: [
       {
-        label: '搞一个小小的无害惊喜，让大家笑一下。',
+        label: '像鹦鹉模仿声音一样，搞个无害小惊喜让大家笑。',
         weights: weights([
           ['mischief', 1],
           ['social', 0.7],
@@ -636,7 +639,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '递点吃的、补点水，慢慢照顾回来。',
+        label: '像蜜蜂回巢一样，递点吃的水，慢慢照顾回来。',
         weights: weights([
           ['nurture', 1],
           ['social', 0.6],
@@ -650,7 +653,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '任务要经过一段深水。',
     options: [
       {
-        label: '我可以适应水里的节奏，慢慢找路。',
+        label: '像海豚、鳕鱼或守卫者一样，适应水里的节奏找路。',
         weights: weights([
           ['aquatic', 1],
           ['patience', 0.6],
@@ -658,7 +661,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '我会尽快通过，不在水里拖太久。',
+        label: '像兔子过危险地带一样，尽快通过，不在水里拖太久。',
         weights: weights([
           ['mobility', 0.9],
           ['caution', 0.6],
@@ -672,7 +675,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '一个决定会影响很多人。',
     options: [
       {
-        label: '优先保护大家的安全，慢一点也没关系。',
+        label: '像铁傀儡守护村庄一样，优先保证大家安全。',
         weights: weights([
           ['protection', 1],
           ['caution', 0.8],
@@ -680,7 +683,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '抓住窗口期推进，错过就太可惜。',
+        label: '像劫掠兽冲开路障一样，抓住窗口期推进。',
         weights: weights([
           ['aggression', 0.8],
           ['mobility', 0.7],
@@ -694,7 +697,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '你收到一张没署名的小纸条。',
     options: [
       {
-        label: '把字迹、纸张和时机都研究一下。',
+        label: '像嗅探兽找古种子一样，把字迹和时机都研究一下。',
         weights: weights([
           ['curiosity', 1],
           ['caution', 0.6],
@@ -702,7 +705,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '先藏好，不让别人被这件事打扰。',
+        label: '像潜影贝关上外壳一样，先藏好不让别人被打扰。',
         weights: weights([
           ['stealth', 0.9],
           ['protection', 0.7],
@@ -716,7 +719,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '大家要搬一堆很重的材料。',
     options: [
       {
-        label: '分批慢慢搬，稳比快重要。',
+        label: '像骡、驴和骆驼一样，分批慢慢搬，稳比快重要。',
         weights: weights([
           ['resilience', 1],
           ['patience', 0.8],
@@ -724,7 +727,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '找捷径和工具，让搬运变轻一点。',
+        label: '像狐狸找机会一样，先找捷径和工具让搬运变轻。',
         weights: weights([
           ['resource', 0.9],
           ['curiosity', 0.7],
@@ -738,7 +741,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '你在大家面前出了小错。',
     options: [
       {
-        label: '坦然笑笑，顺手把场面接住。',
+        label: '像热带鱼颜色鲜明一样，坦然笑笑把场面接住。',
         weights: weights([
           ['spectacle', 0.8],
           ['resilience', 0.7],
@@ -746,7 +749,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '先退一步，安静修正错误。',
+        label: '像鱿鱼喷墨后撤一样，先退一步安静修正。',
         weights: weights([
           ['caution', 0.8],
           ['stealth', 0.7],
@@ -760,7 +763,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '熟悉的小路被堵住了。',
     options: [
       {
-        label: '换路，顺便看看有没有新风景。',
+        label: '像海豚换水路一样，换路顺便看看新风景。',
         weights: weights([
           ['curiosity', 1],
           ['mobility', 0.8],
@@ -768,7 +771,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '想办法清理障碍，把可靠路线修回来。',
+        label: '像铁傀儡修回防线一样，把可靠路线清理回来。',
         weights: weights([
           ['resilience', 0.8],
           ['loyalty', 0.7],
@@ -782,7 +785,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '旁边搬来一个有点神秘的新邻居。',
     options: [
       {
-        label: '先保持礼貌距离，慢慢熟悉。',
+        label: '像豹猫保持距离一样，先礼貌观察，慢慢熟悉。',
         weights: weights([
           ['caution', 0.8],
           ['patience', 0.7],
@@ -790,7 +793,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '带点小礼物过去，看看能不能聊起来。',
+        label: '像村民互相交流一样，带点小礼物过去聊聊。',
         weights: weights([
           ['social', 1],
           ['trade', 0.6],
@@ -804,7 +807,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '眼角闪过一个很快的影子。',
     options: [
       {
-        label: '追上去看一眼，可能是线索。',
+        label: '像幻翼俯冲或兔子快跳一样，追上去看一眼。',
         weights: weights([
           ['mobility', 1],
           ['curiosity', 0.8],
@@ -812,7 +815,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '先别动，判断它是不是在引你过去。',
+        label: '像监守者听振动一样，先别动，判断是不是诱饵。',
         weights: weights([
           ['caution', 1],
           ['stealth', 0.7],
@@ -826,7 +829,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '你和朋友一起布置公共空间。',
     options: [
       {
-        label: '让每个人都有舒服的位置。',
+        label: '像村庄要照顾每个职业一样，让每个人都有舒服位置。',
         weights: weights([
           ['social', 1],
           ['nurture', 0.8],
@@ -834,7 +837,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '做成好看又有记忆点的样子。',
+        label: '像哞菇岛那样做成稀有又有记忆点的样子。',
         weights: weights([
           ['spectacle', 0.9],
           ['curiosity', 0.5],
@@ -848,7 +851,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '有条近路很快，但看起来不太稳。',
     options: [
       {
-        label: '试试，但随时准备调整脚步。',
+        label: '像山羊跳过高处一样，试试但随时准备调整。',
         weights: weights([
           ['mobility', 1],
           ['caution', 0.5],
@@ -856,7 +859,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '绕远一点，少出意外才是真省时间。',
+        label: '像海龟慢慢回出生海滩一样，绕远但少出意外。',
         weights: weights([
           ['patience', 0.9],
           ['caution', 0.8],
@@ -870,7 +873,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '有个小家伙一直跟着你。',
     options: [
       {
-        label: '放慢脚步照看它，别让它掉队。',
+        label: '像海龟照顾蛋或蜜蜂护巢一样，放慢脚步照看它。',
         weights: weights([
           ['nurture', 1],
           ['loyalty', 0.7],
@@ -878,7 +881,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '带它认识周围，但也教它保持距离。',
+        label: '像北极熊护幼崽一样，带它认识周围也保持距离。',
         weights: weights([
           ['curiosity', 0.7],
           ['caution', 0.7],
@@ -892,7 +895,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '重要钥匙不见了。',
     options: [
       {
-        label: '按最后使用顺序一点点回忆。',
+        label: '像村民按作息找线索一样，按最后使用顺序回忆。',
         weights: weights([
           ['order', 0.9],
           ['patience', 0.8],
@@ -900,7 +903,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '发动大家一起找，边找边交换线索。',
+        label: '像海豚和同伴寻宝一样，发动大家边找边交换线索。',
         weights: weights([
           ['social', 0.9],
           ['trade', 0.6],
@@ -914,7 +917,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '你发现一个会发光的小房间。',
     options: [
       {
-        label: '研究它为什么发光，可能藏着机制。',
+        label: '像发光鱿鱼或蛙明灯一样，研究它为什么发光。',
         weights: weights([
           ['curiosity', 1],
           ['resource', 0.5],
@@ -922,7 +925,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '先确认有没有危险，再让大家进来。',
+        label: '像铁傀儡守入口一样，先确认危险再让大家进来。',
         weights: weights([
           ['protection', 0.9],
           ['caution', 0.8],
@@ -936,7 +939,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '雷声突然很响，大家都吓了一下。',
     options: [
       {
-        label: '我会先稳住自己，再稳住别人。',
+        label: '像骷髅马陷阱过后仍冷静一样，先稳住自己和别人。',
         weights: weights([
           ['resilience', 1],
           ['protection', 0.7],
@@ -944,7 +947,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '我会马上找遮蔽物，别站在危险处。',
+        label: '像犰狳受惊蜷缩一样，马上找遮蔽物。',
         weights: weights([
           ['caution', 1],
           ['mobility', 0.6],
@@ -958,7 +961,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '节日摊位需要一个主意。',
     options: [
       {
-        label: '做一个亮眼的小表演，吸引大家来玩。',
+        label: '像鹦鹉或热带鱼一样，做个亮眼表演吸引大家。',
         weights: weights([
           ['spectacle', 1],
           ['social', 0.7],
@@ -966,7 +969,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '设计一个交换小礼物的规则，人人有收获。',
+        label: '像村民交易一样，设计交换小礼物的规则。',
         weights: weights([
           ['trade', 1],
           ['order', 0.6],
@@ -980,7 +983,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '出门后发现背包里少带了东西。',
     options: [
       {
-        label: '想办法就地替代，别让行程停住。',
+        label: '像狐狸会叼现成物品一样，就地找替代，别让行程停住。',
         weights: weights([
           ['resource', 1],
           ['mobility', 0.6],
@@ -988,7 +991,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '回去补齐，准备充分才安心。',
+        label: '像驴带箱子前先备齐一样，回去补齐才安心。',
         weights: weights([
           ['caution', 0.9],
           ['order', 0.7],
@@ -1002,7 +1005,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '有人悄悄夸你做得好。',
     options: [
       {
-        label: '开心收下，但更想继续把事情做好。',
+        label: '像忠诚的狼一样开心收下，然后继续把事做好。',
         weights: weights([
           ['patience', 0.8],
           ['loyalty', 0.6],
@@ -1010,7 +1013,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '把功劳也分给帮忙的人。',
+        label: '像蜜蜂群体协作一样，把功劳也分给帮忙的人。',
         weights: weights([
           ['social', 0.9],
           ['nurture', 0.6],
@@ -1024,7 +1027,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '你看到有人被不公平对待。',
     options: [
       {
-        label: '站出来说明问题，不能让它过去。',
+        label: '像铁傀儡发现威胁一样，站出来说明问题。',
         weights: weights([
           ['protection', 1],
           ['aggression', 0.7],
@@ -1032,7 +1035,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '先把受委屈的人带离现场，再想办法。',
+        label: '像猫把危险挡在门外一样，先把受委屈的人带离现场。',
         weights: weights([
           ['nurture', 0.9],
           ['caution', 0.7],
@@ -1046,7 +1049,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '目标一直在变，计划跟不上。',
     options: [
       {
-        label: '跟着变化快速调整，先别停。',
+        label: '像旋风人的风弹改变战场一样，跟着变化快速调整。',
         weights: weights([
           ['mobility', 1],
           ['curiosity', 0.6],
@@ -1054,7 +1057,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '抓住不变的部分，重新立一个框架。',
+        label: '像潜影贝固定阵地一样，抓住不变部分重立框架。',
         weights: weights([
           ['order', 0.9],
           ['patience', 0.7],
@@ -1068,7 +1071,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '有人一直越过你的边界。',
     options: [
       {
-        label: '明确说不，让边界被看见。',
+        label: '像河豚靠近威胁就膨胀一样，明确说不。',
         weights: weights([
           ['aggression', 0.8],
           ['order', 0.7],
@@ -1076,7 +1079,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '先拉开距离，用行动减少接触。',
+        label: '像豹猫不让人突然靠近一样，先拉开距离减少接触。',
         weights: weights([
           ['independence', 0.9],
           ['stealth', 0.7],
@@ -1090,7 +1093,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '你找到一种很少见的材料。',
     options: [
       {
-        label: '存起来，等真正需要时再用。',
+        label: '像猪灵看重金锭一样，存起来等关键时候用。',
         weights: weights([
           ['resource', 1],
           ['patience', 0.7],
@@ -1098,7 +1101,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '立刻试试它能做出什么效果。',
+        label: '像铜傀儡按按钮一样，立刻试试它能触发什么效果。',
         weights: weights([
           ['curiosity', 1],
           ['spectacle', 0.5],
@@ -1112,7 +1115,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '夜里必须穿过一片空地。',
     options: [
       {
-        label: '贴着阴影走，尽量不惊动任何东西。',
+        label: '像苦力怕无声靠近一样，贴着阴影走，不惊动任何东西。',
         weights: weights([
           ['stealth', 1],
           ['caution', 0.8],
@@ -1120,7 +1123,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '举着光走，让自己和路线都很明显。',
+        label: '像烈焰人或恶魂一样举着光，让路线被看见。',
         weights: weights([
           ['spectacle', 0.8],
           ['protection', 0.6],
@@ -1134,7 +1137,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '队伍需要一个集合信号。',
     options: [
       {
-        label: '简单、固定、大家一听就懂。',
+        label: '像村民钟声和作息一样，简单固定，大家一听就懂。',
         weights: weights([
           ['order', 1],
           ['social', 0.6],
@@ -1142,7 +1145,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '有点特别，最好听起来就很有记忆点。',
+        label: '像鹦鹉模仿怪声一样，特别一点才有记忆点。',
         weights: weights([
           ['spectacle', 0.9],
           ['mischief', 0.6],
@@ -1156,7 +1159,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '等待时间比预想中久很多。',
     options: [
       {
-        label: '能等，顺便整理信息和物资。',
+        label: '像嗅探兽慢慢寻找种子一样，能等也能整理物资。',
         weights: weights([
           ['patience', 1],
           ['resource', 0.6],
@@ -1164,7 +1167,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '坐不住，想找点能推进的小动作。',
+        label: '像史莱姆不停弹跳一样，坐不住想找点小动作。',
         weights: weights([
           ['mobility', 0.9],
           ['curiosity', 0.7],
@@ -1178,7 +1181,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '别人过不了断桥，正在发愁。',
     options: [
       {
-        label: '先搭一个稳稳的临时通道。',
+        label: '像铁傀儡守路一样，先搭一个稳稳的临时通道。',
         weights: weights([
           ['protection', 0.9],
           ['order', 0.8],
@@ -1186,7 +1189,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '教他找另一条路，自己走也能安全。',
+        label: '像海豚领路一样，教他找另一条安全路线。',
         weights: weights([
           ['curiosity', 0.8],
           ['independence', 0.6],
@@ -1197,10 +1200,10 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
   },
   {
     id: 'q52-small-conflict',
-    prompt: '小误会快要变成大冲突。',
+    prompt: '小误会快变成大冲突。',
     options: [
       {
-        label: '立刻把话说开，别让它继续发酵。',
+        label: '像村民交易要说清条件一样，立刻把话说开。',
         weights: weights([
           ['social', 0.8],
           ['order', 0.7],
@@ -1208,7 +1211,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '先降温，等大家都冷静再谈。',
+        label: '像熊猫按情绪节奏生活一样，先降温再谈。',
         weights: weights([
           ['patience', 0.9],
           ['nurture', 0.7],
@@ -1222,7 +1225,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '一个东西闪闪发光，但位置很可疑。',
     options: [
       {
-        label: '不急着碰，先看周围有没有机关。',
+        label: '像豹猫看见陌生人一样，不急着碰，先看有没有机关。',
         weights: weights([
           ['caution', 1],
           ['stealth', 0.6],
@@ -1230,7 +1233,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '想办法隔空试一下，看看会发生什么。',
+        label: '像铜傀儡试按钮一样，想办法隔空试一下。',
         weights: weights([
           ['curiosity', 0.9],
           ['mischief', 0.7],
@@ -1244,7 +1247,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '你的家门口出现了陌生脚印。',
     options: [
       {
-        label: '加固入口，今晚提高警觉。',
+        label: '像铁傀儡守村一样，加固入口提高警觉。',
         weights: weights([
           ['protection', 1],
           ['caution', 0.8],
@@ -1252,7 +1255,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '顺着脚印查来源，弄清谁来过。',
+        label: '像狼循着目标一样，顺着脚印查来源。',
         weights: weights([
           ['curiosity', 0.9],
           ['stealth', 0.6],
@@ -1266,7 +1269,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '有些工作没人看见，但很重要。',
     options: [
       {
-        label: '没关系，安静做好也很有价值。',
+        label: '像猫夜里守门一样，安静做好也有价值。',
         weights: weights([
           ['patience', 1],
           ['loyalty', 0.7],
@@ -1274,7 +1277,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '至少要留下记录，让后来的人知道。',
+        label: '像村民工作站记录职业一样，留下记录给后来的人。',
         weights: weights([
           ['order', 0.9],
           ['social', 0.5],
@@ -1288,7 +1291,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '有人差一点掉进坑里。',
     options: [
       {
-        label: '马上伸手拉住，先救人再说。',
+        label: '像狼扑上去护主一样，马上伸手先救人。',
         weights: weights([
           ['protection', 1],
           ['mobility', 0.7],
@@ -1296,7 +1299,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '先喊停周围动作，别让更多人靠近。',
+        label: '像村民敲钟避难一样，先喊停周围动作。',
         weights: weights([
           ['order', 0.9],
           ['caution', 0.8],
@@ -1310,7 +1313,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '大家要制定一条新规则。',
     options: [
       {
-        label: '规则要清楚，执行起来不能含糊。',
+        label: '像村民职业和交易规则一样，清楚执行不能含糊。',
         weights: weights([
           ['order', 1],
           ['protection', 0.5],
@@ -1318,7 +1321,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '规则要留余地，不同情况可以调整。',
+        label: '像狐狸夜行路线一样，规则要能随情况调整。',
         weights: weights([
           ['curiosity', 0.6],
           ['social', 0.6],
@@ -1329,10 +1332,10 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
   },
   {
     id: 'q58-far-light',
-    prompt: '远处有一点灯光，像是在邀请你过去。',
+    prompt: '远处有一点灯光，像在邀请你过去。',
     options: [
       {
-        label: '想去看看，光从哪里来很有意思。',
+        label: '像发光鱿鱼吸引目光一样，想去看看光从哪来。',
         weights: weights([
           ['curiosity', 1],
           ['mobility', 0.7],
@@ -1340,7 +1343,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '先绕一圈观察，别被光牵着走。',
+        label: '像监守者不靠视觉判断一样，先绕一圈观察。',
         weights: weights([
           ['caution', 0.9],
           ['stealth', 0.7],
@@ -1354,7 +1357,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '有人提出一个看起来不错的交换。',
     options: [
       {
-        label: '认真算算双方是不是都划算。',
+        label: '像村民和猪灵一样，认真算双方是否划算。',
         weights: weights([
           ['trade', 1],
           ['resource', 0.8],
@@ -1362,7 +1365,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '先看对方是否可信，再谈条件。',
+        label: '像豹猫建立信任一样，先看对方是否可信。',
         weights: weights([
           ['caution', 0.9],
           ['social', 0.5],
@@ -1376,7 +1379,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '你要给小屋选一种装饰风格。',
     options: [
       {
-        label: '颜色多一点，进门就觉得开心。',
+        label: '像热带鱼花纹一样，颜色多一点，进门就开心。',
         weights: weights([
           ['spectacle', 0.9],
           ['social', 0.5],
@@ -1384,7 +1387,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '颜色柔和一点，待久了也舒服。',
+        label: '像熊猫竹林一样，柔和舒服，待久也不累。',
         weights: weights([
           ['patience', 0.8],
           ['nurture', 0.6],
@@ -1395,10 +1398,10 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
   },
   {
     id: 'q61-escape-route',
-    prompt: '你进入一个新地方，会不会先记出口？',
+    prompt: '进入一个新地方，你会不会先记出口？',
     options: [
       {
-        label: '会，知道怎么离开才放松。',
+        label: '像犰狳先确认安全一样，会，知道怎么离开才放松。',
         weights: weights([
           ['caution', 1],
           ['order', 0.6],
@@ -1406,7 +1409,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '不一定，我更想先看里面有什么。',
+        label: '像悦灵飞去找物品一样，不一定，更想先看里面有什么。',
         weights: weights([
           ['curiosity', 1],
           ['independence', 0.5],
@@ -1420,7 +1423,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '有人拜托你送一件小东西。',
     options: [
       {
-        label: '一定送到，还会确认对方收到。',
+        label: '像悦灵把物品投回主人或音符盒旁一样，一定送到。',
         weights: weights([
           ['loyalty', 1],
           ['social', 0.6],
@@ -1428,7 +1431,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '送到路上顺便看看有没有更好的路线。',
+        label: '像海豚带路一样，送的路上顺便找更好路线。',
         weights: weights([
           ['mobility', 0.8],
           ['curiosity', 0.7],
@@ -1442,7 +1445,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '路很颠，事情也不太顺。',
     options: [
       {
-        label: '咬咬牙继续，慢慢会过去。',
+        label: '像炽足兽在熔岩上慢慢走一样，咬咬牙继续。',
         weights: weights([
           ['resilience', 1],
           ['patience', 0.8],
@@ -1450,7 +1453,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '换个姿势前进，别硬扛同一种难受。',
+        label: '像山羊换落脚点一样，换个姿势前进。',
         weights: weights([
           ['mobility', 0.9],
           ['curiosity', 0.5],
@@ -1464,7 +1467,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '一件事刚露出苗头。',
     options: [
       {
-        label: '先看它怎么发展，不急着插手。',
+        label: '像潜影贝先关壳观察一样，不急着插手。',
         weights: weights([
           ['patience', 1],
           ['caution', 0.6],
@@ -1472,7 +1475,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '趁早处理，小问题别养成大问题。',
+        label: '像铁傀儡看见威胁就行动一样，趁早处理。',
         weights: weights([
           ['aggression', 0.8],
           ['order', 0.7],
@@ -1486,7 +1489,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '朋友突然来找你玩，声音还很大。',
     options: [
       {
-        label: '被打断也没关系，一起热闹一下。',
+        label: '像鹦鹉停在肩上热闹一下，被打断也没关系。',
         weights: weights([
           ['social', 1],
           ['mischief', 0.6],
@@ -1494,7 +1497,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '先把手上的事收尾，再慢慢加入。',
+        label: '像村民先完成工作一样，把手上的事收尾再加入。',
         weights: weights([
           ['order', 0.8],
           ['patience', 0.7],
@@ -1508,7 +1511,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '你想一个人安静一会儿。',
     options: [
       {
-        label: '找个没人注意的小角落回血。',
+        label: '像蝙蝠待在洞顶一样，找个没人注意的小角落回血。',
         weights: weights([
           ['stealth', 1],
           ['independence', 0.8],
@@ -1516,7 +1519,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '告诉亲近的人我需要一点时间。',
+        label: '像驯服的狼一样，告诉亲近的人我需要一点时间。',
         weights: weights([
           ['social', 0.7],
           ['loyalty', 0.6],
@@ -1530,7 +1533,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '脑袋里冒出一个有点离谱的点子。',
     options: [
       {
-        label: '先试小规模，万一很好玩呢。',
+        label: '像铜傀儡随机按按钮一样，先小规模试试。',
         weights: weights([
           ['mischief', 1],
           ['curiosity', 0.8],
@@ -1538,7 +1541,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '先写下来，等条件成熟再试。',
+        label: '像嗅探兽慢慢找种子一样，先记下来等条件成熟。',
         weights: weights([
           ['patience', 0.8],
           ['order', 0.7],
@@ -1552,7 +1555,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '有人催你快点改变立场。',
     options: [
       {
-        label: '如果我判断没错，就会稳稳站住。',
+        label: '像监守者站在深暗里一样，判断没错就稳稳站住。',
         weights: weights([
           ['resilience', 1],
           ['independence', 0.7],
@@ -1560,7 +1563,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '我会听新信息，能调整就调整。',
+        label: '像海豚顺水调整方向一样，有新信息就调整。',
         weights: weights([
           ['curiosity', 0.8],
           ['social', 0.6],
@@ -1574,7 +1577,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '如果开一个小摊，你更想卖什么？',
     options: [
       {
-        label: '实用补给，让路过的人真的用得上。',
+        label: '像村民职业交易一样，卖路过的人真用得上的补给。',
         weights: weights([
           ['resource', 1],
           ['trade', 0.8],
@@ -1582,7 +1585,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '稀奇小玩意，让人忍不住停下来看。',
+        label: '像流浪商人一样，卖稀奇小玩意让人停下来看。',
         weights: weights([
           ['spectacle', 0.8],
           ['curiosity', 0.7],
@@ -1596,7 +1599,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '很久没联系的朋友突然需要帮忙。',
     options: [
       {
-        label: '能帮就帮，旧连接也值得认真对待。',
+        label: '像狼认定同伴后会跟随一样，能帮就认真帮。',
         weights: weights([
           ['loyalty', 1],
           ['nurture', 0.7],
@@ -1604,7 +1607,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '先问清情况，别盲目答应。',
+        label: '像豹猫慢慢建立信任一样，先问清情况再答应。',
         weights: weights([
           ['caution', 0.9],
           ['order', 0.6],
@@ -1618,7 +1621,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '计划突然散架，大家有点慌。',
     options: [
       {
-        label: '我会先把最危险的部分稳住。',
+        label: '像铁傀儡先挡住危险一样，稳住最危险的部分。',
         weights: weights([
           ['protection', 0.9],
           ['resilience', 0.8],
@@ -1626,7 +1629,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '我会快速找新机会，别陷在原计划里。',
+        label: '像旋风人跳跃换位一样，快速找新机会。',
         weights: weights([
           ['mobility', 1],
           ['curiosity', 0.7],
@@ -1640,7 +1643,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '鞋子踩了一脚泥，还要继续赶路。',
     options: [
       {
-        label: '先擦干净，舒服了再走。',
+        label: '像村民回家前整理路线一样，先擦干净再走。',
         weights: weights([
           ['order', 0.8],
           ['patience', 0.7],
@@ -1648,7 +1651,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '先走，泥巴干了再处理。',
+        label: '像炽足兽离不开熔岩也继续走一样，先赶路，泥干再处理。',
         weights: weights([
           ['resilience', 0.8],
           ['mobility', 0.7],
@@ -1659,10 +1662,10 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
   },
   {
     id: 'q73-soft-warning',
-    prompt: '你感觉某件事不太对劲，但证据还不够。',
+    prompt: '你感觉某件事不对劲，但证据还不够。',
     options: [
       {
-        label: '先提醒亲近的人小心一点。',
+        label: '像猫驱离危险一样，先提醒亲近的人小心。',
         weights: weights([
           ['protection', 0.8],
           ['caution', 0.8],
@@ -1670,7 +1673,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '继续观察，等线索更明确。',
+        label: '像监守者等振动更明确一样，继续观察。',
         weights: weights([
           ['patience', 0.9],
           ['stealth', 0.6],
@@ -1684,7 +1687,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '如果必须登场，你希望怎么出现？',
     options: [
       {
-        label: '利落、明确，让大家立刻知道我来了。',
+        label: '像恶魂火球或凋灵生成一样，利落明确，让人知道我来了。',
         weights: weights([
           ['spectacle', 1],
           ['aggression', 0.6],
@@ -1692,7 +1695,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '轻轻出现，先融入环境再行动。',
+        label: '像苦力怕接近前那么安静，先融入环境再行动。',
         weights: weights([
           ['stealth', 0.9],
           ['caution', 0.5],
@@ -1706,7 +1709,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '同一条路线你已经走了很多遍。',
     options: [
       {
-        label: '熟悉很好，稳定路线让人安心。',
+        label: '像海龟记得出生海滩一样，熟悉路线让人安心。',
         weights: weights([
           ['loyalty', 0.8],
           ['order', 0.7],
@@ -1714,7 +1717,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '想换条路，给今天一点新鲜感。',
+        label: '像末影人瞬移一样，想换条路给今天一点新鲜感。',
         weights: weights([
           ['curiosity', 1],
           ['mobility', 0.7],
@@ -1728,7 +1731,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '帮完忙后，对方想回礼。',
     options: [
       {
-        label: '收一点就好，心意到了就行。',
+        label: '像悦灵送回物品一样，收一点心意就好。',
         weights: weights([
           ['social', 0.7],
           ['nurture', 0.6],
@@ -1736,7 +1739,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '那就换成彼此都需要的东西。',
+        label: '像村民交易一样，换成彼此都需要的东西。',
         weights: weights([
           ['trade', 1],
           ['resource', 0.7],
@@ -1750,7 +1753,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '一大片空地，什么都还没发生。',
     options: [
       {
-        label: '想冲出去跑一圈，看看边界在哪。',
+        label: '像马在开阔地奔跑一样，想冲出去看看边界。',
         weights: weights([
           ['mobility', 1],
           ['curiosity', 0.6],
@@ -1758,7 +1761,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '想先找个安全点，建立一个小据点。',
+        label: '像铁傀儡先守村一样，找安全点建立小据点。',
         weights: weights([
           ['caution', 0.9],
           ['protection', 0.6],
@@ -1772,7 +1775,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '你答应了一个不算大的承诺。',
     options: [
       {
-        label: '哪怕很小，也要记得完成。',
+        label: '像狼保持跟随一样，哪怕很小也要完成。',
         weights: weights([
           ['loyalty', 1],
           ['order', 0.6],
@@ -1780,7 +1783,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '如果情况变化，会及时解释和调整。',
+        label: '像海豚顺流领路一样，情况变化就及时解释调整。',
         weights: weights([
           ['social', 0.7],
           ['mobility', 0.5],
@@ -1794,7 +1797,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '你发现一个很暖和的小角落。',
     options: [
       {
-        label: '想把它变成大家都能休息的地方。',
+        label: '像蜜蜂回巢一样，想把它变成大家能休息的地方。',
         weights: weights([
           ['nurture', 1],
           ['social', 0.7],
@@ -1802,7 +1805,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '想自己静静待一会儿，恢复能量。',
+        label: '像猫窝在一边一样，想自己静静恢复能量。',
         weights: weights([
           ['independence', 0.9],
           ['patience', 0.6],
@@ -1816,7 +1819,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '有人笑得很神秘，好像知道什么。',
     options: [
       {
-        label: '配合一下，看看谜底会不会自己出来。',
+        label: '像鹦鹉模仿声音一样，配合看看谜底会不会出来。',
         weights: weights([
           ['mischief', 0.8],
           ['curiosity', 0.7],
@@ -1824,7 +1827,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '不被带节奏，先守住自己的判断。',
+        label: '像末影人不喜欢被直视一样，不被带节奏，守住判断。',
         weights: weights([
           ['caution', 0.8],
           ['independence', 0.7],
@@ -1838,7 +1841,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '最后一份资源只够做一件事。',
     options: [
       {
-        label: '用在最能保护大家的地方。',
+        label: '像铁傀儡和北极熊护住重要对象一样，用在保护大家。',
         weights: weights([
           ['protection', 0.9],
           ['resource', 0.8],
@@ -1846,7 +1849,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '用在最可能打开新局面的地方。',
+        label: '像嗅探兽找到古种子一样，用在最可能打开新局的地方。',
         weights: weights([
           ['curiosity', 0.8],
           ['aggression', 0.5],
@@ -1860,7 +1863,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '水面很平，下面看不清。',
     options: [
       {
-        label: '慢慢靠近，水下也许有答案。',
+        label: '像鳕鱼、鲑鱼和鹦鹉螺一样，慢慢靠近水下答案。',
         weights: weights([
           ['aquatic', 1],
           ['curiosity', 0.6],
@@ -1868,7 +1871,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '不轻易下水，先从岸上判断。',
+        label: '像河豚边界清楚一样，不轻易下水，先从岸上判断。',
         weights: weights([
           ['caution', 0.9],
           ['order', 0.5],
@@ -1882,7 +1885,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '有人在陌生地方迷路了。',
     options: [
       {
-        label: '陪他回到熟悉的地方，别让他害怕。',
+        label: '像海龟回出生海滩一样，陪他回到熟悉地方。',
         weights: weights([
           ['nurture', 1],
           ['protection', 0.8],
@@ -1890,7 +1893,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '教他看标记和方向，下次能自己走。',
+        label: '像村民认路和作息一样，教他看标记和方向。',
         weights: weights([
           ['order', 0.8],
           ['curiosity', 0.5],
@@ -1904,7 +1907,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '你最希望自己的厉害之处像什么？',
     options: [
       {
-        label: '平时不显眼，但关键时刻很可靠。',
+        label: '像铁傀儡平时沉默但关键可靠一样，不显眼也能扛事。',
         weights: weights([
           ['resilience', 1],
           ['stealth', 0.6],
@@ -1912,7 +1915,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '一出现就能改变局势，让人记住。',
+        label: '像末影龙或凋灵一样，一出现就改变局势。',
         weights: weights([
           ['spectacle', 1],
           ['aggression', 0.7],
@@ -1926,7 +1929,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '一个作品只完成了一半。',
     options: [
       {
-        label: '继续打磨，直到它真的完整。',
+        label: '像潜影贝守阵地一样，继续打磨直到完整。',
         weights: weights([
           ['patience', 1],
           ['order', 0.8],
@@ -1934,7 +1937,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '先拿去试用，边用边补。',
+        label: '像铜傀儡试按钮一样，先拿去试用边用边补。',
         weights: weights([
           ['curiosity', 0.8],
           ['mobility', 0.6],
@@ -1948,7 +1951,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '一艘小船坐得满满的。',
     options: [
       {
-        label: '安排好位置和重量，慢慢划。',
+        label: '像海龟和鹦鹉螺懂水路一样，安排重量慢慢划。',
         weights: weights([
           ['aquatic', 0.8],
           ['order', 0.8],
@@ -1956,7 +1959,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '让大家轻松一点，路上聊聊天。',
+        label: '像海豚结伴游动一样，让大家轻松聊天。',
         weights: weights([
           ['social', 0.9],
           ['nurture', 0.5],
@@ -1970,7 +1973,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '你收到一个完全没想到的礼物。',
     options: [
       {
-        label: '先好好收着，珍惜这份心意。',
+        label: '像悦灵珍惜被给予的物品一样，先好好收着。',
         weights: weights([
           ['loyalty', 0.8],
           ['resource', 0.6],
@@ -1978,7 +1981,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '马上研究它能怎么玩、能做什么。',
+        label: '像铜傀儡研究按钮一样，马上研究它能怎么玩。',
         weights: weights([
           ['curiosity', 1],
           ['mischief', 0.5],
@@ -1992,7 +1995,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '队伍需要有人守住最后一道线。',
     options: [
       {
-        label: '我可以留下，稳稳把线守住。',
+        label: '像铁傀儡、潜影贝或监守者一样，留下把线守住。',
         weights: weights([
           ['protection', 1],
           ['resilience', 0.9],
@@ -2000,7 +2003,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '我更适合从侧面找突破口。',
+        label: '像猫、狐狸或洞穴蜘蛛一样，从侧面找突破口。',
         weights: weights([
           ['mobility', 0.8],
           ['stealth', 0.7],
@@ -2011,10 +2014,10 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
   },
   {
     id: 'q89-odd-collection',
-    prompt: '你会不会收集一些别人觉得奇怪的小东西？',
+    prompt: '你会不会收集别人觉得奇怪的小东西？',
     options: [
       {
-        label: '会，它们总有一天能派上用场。',
+        label: '像狐狸叼物、悦灵捡物一样，会，它们总有一天有用。',
         weights: weights([
           ['resource', 1],
           ['curiosity', 0.7],
@@ -2022,7 +2025,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '不太会，我更喜欢保持轻便。',
+        label: '像马或兔子保持轻快一样，不太会，轻便更重要。',
         weights: weights([
           ['mobility', 0.8],
           ['order', 0.6],
@@ -2033,10 +2036,10 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
   },
   {
     id: 'q90-spark-before-storm',
-    prompt: '你感觉一场大事快要开始。',
+    prompt: '你感觉一场大事快开始了。',
     options: [
       {
-        label: '兴奋，想站到能推动变化的位置。',
+        label: '像凋灵或劫掠兽启动攻势一样，想站到推动变化的位置。',
         weights: weights([
           ['aggression', 0.9],
           ['spectacle', 0.8],
@@ -2044,7 +2047,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '警觉，想先保护好重要的人和物。',
+        label: '像铁傀儡守村一样，先保护重要的人和物。',
         weights: weights([
           ['caution', 0.9],
           ['protection', 0.8],
@@ -2058,7 +2061,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '队伍已经有点累了，但还没到终点。',
     options: [
       {
-        label: '鼓励大家一小段一小段往前走。',
+        label: '像炽足兽在熔岩上坚持一样，鼓励大家一段段往前。',
         weights: weights([
           ['resilience', 0.9],
           ['social', 0.7],
@@ -2066,7 +2069,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '找一个安全点休整，恢复后再出发。',
+        label: '像海龟慢节奏一样，找安全点休整后再出发。',
         weights: weights([
           ['caution', 0.8],
           ['patience', 0.8],
@@ -2080,7 +2083,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '墙上有个没标签的按钮。',
     options: [
       {
-        label: '想按，但会先找东西隔远一点试。',
+        label: '像铜傀儡看到铜按钮一样，想按但会隔远一点试。',
         weights: weights([
           ['mischief', 0.9],
           ['curiosity', 0.8],
@@ -2088,7 +2091,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '先查清楚连接到哪里，不乱按。',
+        label: '像村民遵守工作规则一样，先查清楚连接到哪里。',
         weights: weights([
           ['order', 0.9],
           ['caution', 0.8],
@@ -2102,7 +2105,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '最后一扇门打开前，你更想确认什么？',
     options: [
       {
-        label: '大家都准备好了，进去后能互相照应。',
+        label: '像狼群和铁傀儡一样，确认大家进去后能互相照应。',
         weights: weights([
           ['social', 0.9],
           ['protection', 0.8],
@@ -2110,7 +2113,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '线索、物资和退路都清楚，可以开始。',
+        label: '像村民和探险者准备交易路线一样，确认线索、物资和退路。',
         weights: weights([
           ['order', 0.8],
           ['resource', 0.7],

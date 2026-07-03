@@ -205,7 +205,7 @@ function renderRankedMob(ranked: RankedMob): string {
     <li>
       <a href="${ranked.profile.wikiUrl}" target="_blank" rel="noreferrer">
         <span>${escapeHtml(ranked.profile.name)}</span>
-        <span>${Math.round(ranked.score * 100)}%</span>
+        <span>${Math.round(ranked.displayScore * 100)}%</span>
       </a>
     </li>
   `
@@ -252,7 +252,7 @@ function renderResult(): void {
           ${traits.map((trait) => `<span>${escapeHtml(trait)}</span>`).join('')}
         </div>
         <div class="result-meta">
-          <span>匹配度 ${Math.round(result.top.score * 100)}%</span>
+          <span>匹配度 ${Math.round(result.top.displayScore * 100)}%</span>
           <span>置信 ${Math.round(result.confidence * 100)}%</span>
         </div>
         <div class="alternatives">

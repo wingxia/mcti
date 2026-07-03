@@ -14,6 +14,8 @@ describe('MCTI scoring', () => {
 
     expect(result.top.profile.code).toBe('Allay')
     expect(result.top.score).toBe(0)
+    expect(result.top.displayScore).toBe(0)
+    expect(result.confidence).toBe(0)
   })
 
   it('matches a targeted answer path to the target mob', () => {
@@ -24,6 +26,8 @@ describe('MCTI scoring', () => {
 
     expect(result.top.profile.code).toBe('Warden')
     expect(result.top.score).toBeGreaterThan(result.alternatives[0].score)
+    expect(result.top.displayScore).toBeGreaterThanOrEqual(0.95)
+    expect(result.confidence).toBeGreaterThanOrEqual(0.85)
   })
 
   it('calculates cosine similarity from weighted vectors', () => {

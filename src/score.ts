@@ -1,8 +1,19 @@
 import type { AnswerMap, MobProfile, Question, QuestionOption, RankedMob, ScoredResult, TraitVector } from './types'
 import { mobProfiles } from './data/mobs'
-import { questions } from './data/questions'
+import { questions as defaultQuestions } from './data/questions'
 
 const EPSILON = 0.0000001
+
+type RawRankedMob = Omit<RankedMob, 'displayScore'>
+
+type CalibrationEntry = {
+  idealScore: number
+  idealGap: number
+}
+
+let defaultCalibration: Map<string, CalibrationEntry> | undefined
+
+const clamp01 = (value: number): number => Math.max(0, Math.min(1, value))
 
 export const addVectors = (left: TraitVector, right: TraitVector): TraitVector => {
   const next: TraitVector = { ...left }
@@ -34,7 +45,7 @@ export const cosineSimilarity = (left: TraitVector, right: TraitVector): number 
 
 export const vectorFromAnswers = (
   answers: AnswerMap,
-  sourceQuestions: readonly Question[] = questions,
+  sourceQuestions: readonly Question[] = defaultQuestions,
 ): TraitVector =>
   sourceQuestions.reduce<TraitVector>((vector, question) => {
     const answer = answers[question.id]
@@ -42,10 +53,10 @@ export const vectorFromAnswers = (
     return selected ? addVectors(vector, selected.weights) : vector
   }, {})
 
-export const rankMobs = (
+const rankRawMobs = (
   vector: TraitVector,
   profiles: readonly MobProfile[] = mobProfiles,
-): RankedMob[] =>
+): RawRankedMob[] =>
   profiles
     .map((profile) => ({
       profile,
@@ -59,21 +70,99 @@ export const rankMobs = (
       return left.profile.order - right.profile.order
     })
 
+const optionDot = (option: QuestionOption, profile: MobProfile): number =>
+  dotProduct(option.weights, profile.traits)
+
+export const answerPathForMob = (
+  target: MobProfile,
+  sourceQuestions: readonly Question[] = defaultQuestions,
+): AnswerMap => {
+  const answers: AnswerMap = {}
+  for (const question of sourceQuestions) {
+    const [first, second] = question.options
+    answers[question.id] = optionDot(first, target) >= optionDot(second, target) ? 'a' : 'b'
+  }
+  return answers
+}
+
+const buildCalibration = (
+  profiles: readonly MobProfile[],
+  sourceQuestions: readonly Question[],
+): Map<string, CalibrationEntry> => {
+  const calibration = new Map<string, CalibrationEntry>()
+
+  for (const profile of profiles) {
+    const vector = vectorFromAnswers(answerPathForMob(profile, sourceQuestions), sourceQuestions)
+    const ranked = rankRawMobs(vector, profiles)
+    const ideal = ranked.find((candidate) => candidate.profile.code === profile.code)
+    const runnerUp = ranked.find((candidate) => candidate.profile.code !== profile.code)
+
+    calibration.set(profile.code, {
+      idealScore: Math.max(EPSILON, ideal?.score ?? EPSILON),
+      idealGap: Math.max(EPSILON, (ideal?.score ?? 0) - (runnerUp?.score ?? 0)),
+    })
+  }
+
+  return calibration
+}
+
+const calibrationFor = (
+  profiles: readonly MobProfile[],
+  sourceQuestions: readonly Question[],
+): Map<string, CalibrationEntry> => {
+  if (profiles === mobProfiles && sourceQuestions === defaultQuestions) {
+    defaultCalibration ??= buildCalibration(profiles, sourceQuestions)
+    return defaultCalibration
+  }
+
+  return buildCalibration(profiles, sourceQuestions)
+}
+
+const withDisplayScores = (
+  ranked: readonly RawRankedMob[],
+  calibration: Map<string, CalibrationEntry>,
+  hasSignal: boolean,
+): RankedMob[] =>
+  ranked.map((candidate) => {
+    const entry = calibration.get(candidate.profile.code)
+    return {
+      ...candidate,
+      displayScore: hasSignal && entry ? clamp01(candidate.score / entry.idealScore) : 0,
+    }
+  })
+
+export const rankMobs = (
+  vector: TraitVector,
+  profiles: readonly MobProfile[] = mobProfiles,
+  sourceQuestions: readonly Question[] = defaultQuestions,
+): RankedMob[] =>
+  withDisplayScores(
+    rankRawMobs(vector, profiles),
+    calibrationFor(profiles, sourceQuestions),
+    vectorLength(vector) >= EPSILON,
+  )
+
 export const scoreAnswers = (
   answers: AnswerMap,
-  sourceQuestions: readonly Question[] = questions,
+  sourceQuestions: readonly Question[] = defaultQuestions,
   profiles: readonly MobProfile[] = mobProfiles,
 ): ScoredResult => {
   const vector = vectorFromAnswers(answers, sourceQuestions)
-  const ranked = rankMobs(vector, profiles)
+  const rawRanked = rankRawMobs(vector, profiles)
+  const hasSignal = vectorLength(vector) >= EPSILON
+  const calibration = calibrationFor(profiles, sourceQuestions)
+  const ranked = withDisplayScores(rawRanked, calibration, hasSignal)
   const completedCount = sourceQuestions.filter((question) => answers[question.id]).length
   const top = ranked[0]
   const runnerUp = ranked[1]
-  const confidence = top && runnerUp ? Math.max(0, Math.min(1, top.score - runnerUp.score + 0.35)) : 0
 
   if (!top) {
     throw new Error('No mob profiles are available for scoring.')
   }
+
+  const topCalibration = calibration.get(top.profile.code)
+  const rawGap = runnerUp ? top.score - runnerUp.score : 0
+  const confidence = hasSignal && topCalibration ? clamp01(rawGap / topCalibration.idealGap) : 0
 
   return {
     top,
@@ -85,24 +174,9 @@ export const scoreAnswers = (
   }
 }
 
-const optionDot = (option: QuestionOption, profile: MobProfile): number =>
-  dotProduct(option.weights, profile.traits)
-
-export const answerPathForMob = (
-  target: MobProfile,
-  sourceQuestions: readonly Question[] = questions,
-): AnswerMap => {
-  const answers: AnswerMap = {}
-  for (const question of sourceQuestions) {
-    const [first, second] = question.options
-    answers[question.id] = optionDot(first, target) >= optionDot(second, target) ? 'a' : 'b'
-  }
-  return answers
-}
-
 export const coverageReport = (
   profiles: readonly MobProfile[] = mobProfiles,
-  sourceQuestions: readonly Question[] = questions,
+  sourceQuestions: readonly Question[] = defaultQuestions,
 ) =>
   profiles.map((profile) => {
     const result = scoreAnswers(answerPathForMob(profile, sourceQuestions), sourceQuestions, profiles)
@@ -113,5 +187,7 @@ export const coverageReport = (
       actualCode: result.top.profile.code,
       passed: result.top.profile.code === profile.code,
       score: result.top.score,
+      displayScore: result.top.displayScore,
+      confidence: result.confidence,
     }
   })

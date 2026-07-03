@@ -40,6 +40,7 @@ export type AnswerMap = Record<string, 'a' | 'b'>
 export interface RankedMob {
   profile: MobProfile
   score: number
+  displayScore: number
 }
 
 export interface ScoredResult {
