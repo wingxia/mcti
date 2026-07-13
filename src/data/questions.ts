@@ -1,5 +1,5 @@
-import type { MobProfile, Question, QuestionOption, TraitVector } from '../types'
-import { affinityKey, mobProfiles } from './mobs'
+import type { Question, QuestionOption, TraitVector } from '../types'
+import { mobProfiles } from './mobs'
 
 type ChoiceBlueprint = {
   label: string
@@ -12,60 +12,41 @@ type QuestionBlueprint = {
   options: readonly [ChoiceBlueprint, ChoiceBlueprint]
 }
 
+const targetMobCodes = (label: string): string[] => {
+  const occupied: Array<readonly [number, number]> = []
+  const targets: string[] = []
+
+  for (const profile of [...mobProfiles].sort((left, right) => right.name.length - left.name.length)) {
+    let index = label.indexOf(profile.name)
+    while (index !== -1) {
+      const end = index + profile.name.length
+      if (!occupied.some(([start, stop]) => index < stop && end > start)) {
+        occupied.push([index, end])
+        targets.push(profile.code)
+      }
+      index = label.indexOf(profile.name, index + 1)
+    }
+  }
+
+  return targets
+}
+
 const option = (id: 'a' | 'b', label: string, weights: TraitVector): QuestionOption => ({
   id,
   label,
   weights,
+  targetMobCodes: targetMobCodes(label),
 })
 
 const weights = (entries: readonly (readonly [string, number])[]): TraitVector =>
   Object.fromEntries(entries)
 
-const hashValue = (value: string): number => {
-  let hash = 2166136261
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index)
-    hash = Math.imul(hash, 16777619)
-  }
-  hash ^= hash >>> 16
-  hash = Math.imul(hash, 0x7feb352d)
-  hash ^= hash >>> 15
-  hash = Math.imul(hash, 0x846ca68b)
-  hash ^= hash >>> 16
-  return hash >>> 0
-}
-
-const traitScore = (profile: MobProfile, vector: TraitVector): number =>
-  Object.entries(vector).reduce((total, [key, value]) => total + (profile.traits[key] ?? 0) * value, 0)
-
-const behaviorQuirk = (profile: MobProfile, question: QuestionBlueprint, side: 'a' | 'b'): number =>
-  ((hashValue(`${profile.code}:${question.id}:${side}`) % 2001) / 2000 - 0.5) * 6
-
-const alignedSide = (profile: MobProfile, question: QuestionBlueprint): 'a' | 'b' => {
-  const [first, second] = question.options
-  const firstScore = traitScore(profile, first.weights) + behaviorQuirk(profile, question, 'a')
-  const secondScore = traitScore(profile, second.weights) + behaviorQuirk(profile, question, 'b')
-  return firstScore >= secondScore ? 'a' : 'b'
-}
-
-const withAffinityWeights = (
-  side: 'a' | 'b',
-  question: QuestionBlueprint,
-  baseWeights: TraitVector,
-): TraitVector => {
-  const next: TraitVector = { ...baseWeights }
-  for (const profile of mobProfiles) {
-    next[affinityKey(profile.code)] = alignedSide(profile, question) === side ? 1.45 : -1.45
-  }
-  return next
-}
-
 const buildQuestion = (question: QuestionBlueprint): Question => ({
   id: question.id,
   prompt: question.prompt,
   options: [
-    option('a', question.options[0].label, withAffinityWeights('a', question, question.options[0].weights)),
-    option('b', question.options[1].label, withAffinityWeights('b', question, question.options[1].weights)),
+    option('a', question.options[0].label, question.options[0].weights),
+    option('b', question.options[1].label, question.options[1].weights),
   ],
 })
 
@@ -99,7 +80,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '洞穴里忽然传出细小声响，你会怎么处理？',
     options: [
       {
-        label: '像蝙蝠或洞穴蜘蛛一样轻轻靠近，先看黑暗里有什么。',
+        label: '像蝙蝠、蜘蛛或洞穴蜘蛛一样轻轻靠近，先看黑暗里有什么。',
         weights: weights([
           ['curiosity', 1],
           ['stealth', 0.8],
@@ -121,7 +102,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '同行的人走得慢，队伍快错过时间了。',
     options: [
       {
-        label: '像骆驼能载两个人一样，放慢节奏带大家一起过。',
+        label: '像快乐恶魂装上挽具后能载多人飞行一样，先接住走得慢的同伴。',
         weights: weights([
           ['social', 1],
           ['nurture', 0.9],
@@ -145,7 +126,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '新基地只剩一小块地方，你先安排什么？',
     options: [
       {
-        label: '像盔甲架和村民工作站一样，把床、箱子、工具摆清楚。',
+        label: '像铜傀儡把铜箱物品分到对应箱子一样，先把床、箱子、工具归位。',
         weights: weights([
           ['order', 1],
           ['resource', 0.8],
@@ -167,7 +148,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '朋友为了走哪条路线争起来了。',
     options: [
       {
-        label: '像铁傀儡站出来护村一样，先定一个能行动的方向。',
+        label: '像猪灵蛮兵守住堡垒遗迹一样，先挡住冲突扩散再定方向。',
         weights: weights([
           ['order', 0.8],
           ['aggression', 0.7],
@@ -309,7 +290,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '像铁傀儡守村口一样，站到能看清全局的位置。',
+        label: '像雪傀儡主动向敌对生物投雪球一样，站到能看清全局的位置。',
         weights: weights([
           ['order', 0.9],
           ['social', 0.7],
@@ -323,7 +304,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '你负责照看一小片刚种下的植物。',
     options: [
       {
-        label: '像蜜蜂采花授粉一样，每天照看一点，慢慢等它长好。',
+        label: '像绵羊吃草后重新长出羊毛一样，稳定照料并等待恢复。',
         weights: weights([
           ['nurture', 1],
           ['patience', 0.9],
@@ -367,7 +348,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '墙上有一扇半掩的小门。',
     options: [
       {
-        label: '像猫或豹猫一样悄悄靠近，先从门缝看一眼。',
+        label: '像蠹虫藏进受虫蚀方块一样，先把自己藏好再观察。',
         weights: weights([
           ['stealth', 1],
           ['curiosity', 0.8],
@@ -389,7 +370,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '危险突然贴近，时间只够反应一下。',
     options: [
       {
-        label: '像狼和铁傀儡一样挡在前面，先护住同伴。',
+        label: '像美西螈优先扑向水里的敌对目标一样，先把威胁截住。',
         weights: weights([
           ['protection', 1],
           ['loyalty', 0.8],
@@ -433,7 +414,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '背包只能带一种路上小补给。',
     options: [
       {
-        label: '像牛、羊提供稳定资源一样，带耐放又能救急的。',
+        label: '像鸡定期下蛋、绵羊重新长毛、牛提供牛奶一样，带稳定耐用的补给。',
         weights: weights([
           ['resource', 1],
           ['caution', 0.6],
@@ -485,7 +466,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '像铜傀儡按按钮一样，边试边懂也很好玩。',
+        label: '像硫方怪吸收方块后由材质改变弹跳一样，先试再理解规则。',
         weights: weights([
           ['mischief', 1],
           ['curiosity', 0.8],
@@ -529,7 +510,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '像旋风人改变战场一样，换个办法也许更快。',
+        label: '像女巫按威胁选择饮用或投掷药水一样，马上换一套办法。',
         weights: weights([
           ['curiosity', 0.9],
           ['mobility', 0.7],
@@ -609,7 +590,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '今晚轮到你守夜。',
     options: [
       {
-        label: '像猫驱离幻翼和苦力怕一样，安静巡逻不放过动静。',
+        label: '像沼骸在沼泽里用毒箭压住远处威胁一样，保持距离巡夜。',
         weights: weights([
           ['protection', 0.9],
           ['caution', 0.8],
@@ -653,7 +634,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '任务要经过一段深水。',
     options: [
       {
-        label: '像海豚、鳕鱼或守卫者一样，适应水里的节奏找路。',
+        label: '像溺尸能游泳并投三叉戟、僵尸鹦鹉螺能水下冲刺一样，主动适应深水。',
         weights: weights([
           ['aquatic', 1],
           ['patience', 0.6],
@@ -675,7 +656,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '一个决定会影响很多人。',
     options: [
       {
-        label: '像铁傀儡守护村庄一样，优先保证大家安全。',
+        label: '像僵尸猪灵一只受击就会召来同类反击一样，先保护整个群体。',
         weights: weights([
           ['protection', 1],
           ['caution', 0.8],
@@ -683,7 +664,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '像劫掠兽冲开路障一样，抓住窗口期推进。',
+        label: '像僵尸疣猪兽会攻击几乎所有生物一样，抓住窗口直接推进。',
         weights: weights([
           ['aggression', 0.8],
           ['mobility', 0.7],
@@ -719,7 +700,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '大家要搬一堆很重的材料。',
     options: [
       {
-        label: '像骡、驴和骆驼一样，分批慢慢搬，稳比快重要。',
+        label: '像羊驼和行商羊驼组成驼队、背箱搬运一样，分批稳稳送到。',
         weights: weights([
           ['resilience', 1],
           ['patience', 0.8],
@@ -807,7 +788,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '眼角闪过一个很快的影子。',
     options: [
       {
-        label: '像幻翼俯冲或兔子快跳一样，追上去看一眼。',
+        label: '像恼鬼穿过方块、末影螨突然窜出一样，追上去查清。',
         weights: weights([
           ['mobility', 1],
           ['curiosity', 0.8],
@@ -859,7 +840,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '像海龟慢慢回出生海滩一样，绕远但少出意外。',
+        label: '像疣猪兽遇到诡异菌会退开一样，宁可绕行也不硬闯。',
         weights: weights([
           ['patience', 0.9],
           ['caution', 0.8],
@@ -917,7 +898,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '你发现一个会发光的小房间。',
     options: [
       {
-        label: '像发光鱿鱼或蛙明灯一样，研究它为什么发光。',
+        label: '像青蛙吃下小型岩浆怪会产出蛙明灯一样，研究光是怎样产生的。',
         weights: weights([
           ['curiosity', 1],
           ['resource', 0.5],
@@ -925,7 +906,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '像铁傀儡守入口一样，先确认危险再让大家进来。',
+        label: '像守卫者和远古守卫者守住海底神殿一样，先封住入口。',
         weights: weights([
           ['protection', 0.9],
           ['caution', 0.8],
@@ -1027,7 +1008,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '你看到有人被不公平对待。',
     options: [
       {
-        label: '像铁傀儡发现威胁一样，站出来说明问题。',
+        label: '像卫道士举斧追击目标一样，直接站出来制止。',
         weights: weights([
           ['protection', 1],
           ['aggression', 0.7],
@@ -1046,22 +1027,22 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
   },
   {
     id: 'q45-moving-target',
-    prompt: '目标一直在变，计划跟不上。',
+    prompt: '前路被复杂障碍堵住，你更像怎样突破？',
     options: [
       {
-        label: '像旋风人的风弹改变战场一样，跟着变化快速调整。',
+        label: '像旋风人跳跃换位并用风弹改变战场，绕着障碍制造空间。',
         weights: weights([
           ['mobility', 1],
-          ['curiosity', 0.6],
-          ['mischief', 0.4],
+          ['spectacle', 0.7],
+          ['aggression', 0.5],
         ]),
       },
       {
-        label: '像潜影贝固定阵地一样，抓住不变部分重立框架。',
+        label: '像末影螨体型小又突然出现，贴着缝隙快速钻进去。',
         weights: weights([
-          ['order', 0.9],
-          ['patience', 0.7],
-          ['resilience', 0.4],
+          ['stealth', 0.9],
+          ['mischief', 0.7],
+          ['mobility', 0.5],
         ]),
       },
     ],
@@ -1101,7 +1082,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '像铜傀儡按按钮一样，立刻试试它能触发什么效果。',
+        label: '像硫方怪吸收不同方块会改变物理特性一样，立刻测试材料效果。',
         weights: weights([
           ['curiosity', 1],
           ['spectacle', 0.5],
@@ -1159,15 +1140,15 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '等待时间比预想中久很多。',
     options: [
       {
-        label: '像嗅探兽慢慢寻找种子一样，能等也能整理物资。',
+        label: '像凋灵生成时先蓄满生命再爆发一样，等准备完成再行动。',
         weights: weights([
           ['patience', 1],
-          ['resource', 0.6],
-          ['order', 0.5],
+          ['resilience', 0.8],
+          ['spectacle', 0.5],
         ]),
       },
       {
-        label: '像史莱姆不停弹跳一样，坐不住想找点小动作。',
+        label: '像史莱姆和岩浆怪不断跳跃、受击后还能分裂一样，坐不住想找点动作。',
         weights: weights([
           ['mobility', 0.9],
           ['curiosity', 0.7],
@@ -1233,7 +1214,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '像铜傀儡试按钮一样，想办法隔空试一下。',
+        label: '像唤魔者先放出恼鬼试探一样，隔着距离看看会发生什么。',
         weights: weights([
           ['curiosity', 0.9],
           ['mischief', 0.7],
@@ -1255,7 +1236,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '像狼循着目标一样，顺着脚印查来源。',
+        label: '像僵尸会寻找抵达目标的最短路径一样，顺着脚印查来源。',
         weights: weights([
           ['curiosity', 0.9],
           ['stealth', 0.6],
@@ -1445,7 +1426,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '路很颠，事情也不太顺。',
     options: [
       {
-        label: '像炽足兽在熔岩上慢慢走一样，咬咬牙继续。',
+        label: '像骆驼和骆驼尸壳都能蓄力冲刺越障一样，咬咬牙继续。',
         weights: weights([
           ['resilience', 1],
           ['patience', 0.8],
@@ -1533,7 +1514,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '脑袋里冒出一个有点离谱的点子。',
     options: [
       {
-        label: '像铜傀儡随机按按钮一样，先小规模试试。',
+        label: '像唤魔者先召出恼鬼和尖牙试探一样，先小规模验证。',
         weights: weights([
           ['mischief', 1],
           ['curiosity', 0.8],
@@ -1563,7 +1544,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '像海豚顺水调整方向一样，有新信息就调整。',
+        label: '像蝌蚪会按成长环境变成不同青蛙、僵尸村民也能被治愈一样，有新条件就调整。',
         weights: weights([
           ['curiosity', 0.8],
           ['social', 0.6],
@@ -1651,7 +1632,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '像炽足兽离不开熔岩也继续走一样，先赶路，泥干再处理。',
+        label: '像尸壳在沙漠日光下也不会燃烧一样，先赶路，环境问题稍后处理。',
         weights: weights([
           ['resilience', 0.8],
           ['mobility', 0.7],
@@ -1687,7 +1668,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '如果必须登场，你希望怎么出现？',
     options: [
       {
-        label: '像恶魂火球或凋灵生成一样，利落明确，让人知道我来了。',
+        label: '像恶魂火球、凋灵生成或幻翼俯冲一样，利落明确地登场。',
         weights: weights([
           ['spectacle', 1],
           ['aggression', 0.6],
@@ -1753,7 +1734,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '一大片空地，什么都还没发生。',
     options: [
       {
-        label: '像马在开阔地奔跑一样，想冲出去看看边界。',
+        label: '像马或僵尸马在开阔地奔跑一样，想冲出去看看边界。',
         weights: weights([
           ['mobility', 1],
           ['curiosity', 0.6],
@@ -1937,7 +1918,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '像铜傀儡试按钮一样，先拿去试用边用边补。',
+        label: '像铜傀儡逐箱检查分类条件一样，先投入使用再补齐规则。',
         weights: weights([
           ['curiosity', 0.8],
           ['mobility', 0.6],
@@ -1981,7 +1962,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '像铜傀儡研究按钮一样，马上研究它能怎么玩。',
+        label: '像硫方怪吸收方块后显出内部材质一样，马上试它能改变什么。',
         weights: weights([
           ['curiosity', 1],
           ['mischief', 0.5],
@@ -1995,7 +1976,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '队伍需要有人守住最后一道线。',
     options: [
       {
-        label: '像铁傀儡、潜影贝或监守者一样，留下把线守住。',
+        label: '像猪灵蛮兵守堡垒遗迹、凋灵骷髅守下界要塞一样，留下守住最后一线。',
         weights: weights([
           ['protection', 1],
           ['resilience', 0.9],
@@ -2003,7 +1984,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '像猫、狐狸或洞穴蜘蛛一样，从侧面找突破口。',
+        label: '像恼鬼能穿过方块一样，从侧面绕进突破口。',
         weights: weights([
           ['mobility', 0.8],
           ['stealth', 0.7],
@@ -2039,7 +2020,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '你感觉一场大事快开始了。',
     options: [
       {
-        label: '像凋灵或劫掠兽启动攻势一样，想站到推动变化的位置。',
+        label: '像掠夺者组织袭击、劫掠兽冲阵一样，站到推动攻势的位置。',
         weights: weights([
           ['aggression', 0.9],
           ['spectacle', 0.8],
@@ -2083,7 +2064,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
     prompt: '墙上有个没标签的按钮。',
     options: [
       {
-        label: '像铜傀儡看到铜按钮一样，想按但会隔远一点试。',
+        label: '像末影螨会从末影珍珠落点突然出现一样，隔远一点按下去试。',
         weights: weights([
           ['mischief', 0.9],
           ['curiosity', 0.8],
@@ -2091,7 +2072,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '像村民遵守工作规则一样，先查清楚连接到哪里。',
+        label: '像嘎枝与嘎枝之心相连一样，先查清按钮连接到哪里。',
         weights: weights([
           ['order', 0.9],
           ['caution', 0.8],
@@ -2113,7 +2094,7 @@ const questionBlueprints: readonly QuestionBlueprint[] = [
         ]),
       },
       {
-        label: '像村民和探险者准备交易路线一样，确认线索、物资和退路。',
+        label: '像骷髅保持远程、流浪者、沼骸和焦骸用特殊箭控场一样，确认威胁再进门。',
         weights: weights([
           ['order', 0.8],
           ['resource', 0.7],

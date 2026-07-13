@@ -53,7 +53,6 @@ function categoryLabel(category: MobProfile['category']): string {
 
 function visibleTraits(traits: TraitVector): string[] {
   return Object.entries(traits)
-    .filter(([key]) => !key.startsWith('affinity:'))
     .sort((left, right) => right[1] - left[1])
     .slice(0, 4)
     .map(([key]) => TRAIT_LABELS[key] ?? key)

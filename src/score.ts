@@ -3,15 +3,7 @@ import { mobProfiles } from './data/mobs'
 import { questions as defaultQuestions } from './data/questions'
 
 const EPSILON = 0.0000001
-
-type RawRankedMob = Omit<RankedMob, 'displayScore'>
-
-type CalibrationEntry = {
-  idealScore: number
-  idealGap: number
-}
-
-let defaultCalibration: Map<string, CalibrationEntry> | undefined
+const TARGET_BONUS = 3
 
 const clamp01 = (value: number): number => Math.max(0, Math.min(1, value))
 
@@ -53,25 +45,9 @@ export const vectorFromAnswers = (
     return selected ? addVectors(vector, selected.weights) : vector
   }, {})
 
-const rankRawMobs = (
-  vector: TraitVector,
-  profiles: readonly MobProfile[] = mobProfiles,
-): RawRankedMob[] =>
-  profiles
-    .map((profile) => ({
-      profile,
-      score: cosineSimilarity(vector, profile.traits),
-    }))
-    .sort((left, right) => {
-      const scoreDelta = right.score - left.score
-      if (Math.abs(scoreDelta) > EPSILON) {
-        return scoreDelta
-      }
-      return left.profile.order - right.profile.order
-    })
-
-const optionDot = (option: QuestionOption, profile: MobProfile): number =>
-  dotProduct(option.weights, profile.traits)
+const optionFit = (option: QuestionOption, profile: MobProfile): number =>
+  dotProduct(option.weights, profile.traits) +
+  (option.targetMobCodes.includes(profile.code) ? TARGET_BONUS : 0)
 
 export const answerPathForMob = (
   target: MobProfile,
@@ -80,67 +56,64 @@ export const answerPathForMob = (
   const answers: AnswerMap = {}
   for (const question of sourceQuestions) {
     const [first, second] = question.options
-    answers[question.id] = optionDot(first, target) >= optionDot(second, target) ? 'a' : 'b'
+    answers[question.id] = optionFit(first, target) >= optionFit(second, target) ? 'a' : 'b'
   }
   return answers
 }
 
-const buildCalibration = (
-  profiles: readonly MobProfile[],
-  sourceQuestions: readonly Question[],
-): Map<string, CalibrationEntry> => {
-  const calibration = new Map<string, CalibrationEntry>()
+const calibratedMatchScore = (rawScore: number, hasAnswers: boolean): number =>
+  hasAnswers ? clamp01(0.7 + (rawScore - 0.5) * 0.6) : 0
 
-  for (const profile of profiles) {
-    const vector = vectorFromAnswers(answerPathForMob(profile, sourceQuestions), sourceQuestions)
-    const ranked = rankRawMobs(vector, profiles)
-    const ideal = ranked.find((candidate) => candidate.profile.code === profile.code)
-    const runnerUp = ranked.find((candidate) => candidate.profile.code !== profile.code)
-
-    calibration.set(profile.code, {
-      idealScore: Math.max(EPSILON, ideal?.score ?? EPSILON),
-      idealGap: Math.max(EPSILON, (ideal?.score ?? 0) - (runnerUp?.score ?? 0)),
-    })
-  }
-
-  return calibration
-}
-
-const calibrationFor = (
-  profiles: readonly MobProfile[],
-  sourceQuestions: readonly Question[],
-): Map<string, CalibrationEntry> => {
-  if (profiles === mobProfiles && sourceQuestions === defaultQuestions) {
-    defaultCalibration ??= buildCalibration(profiles, sourceQuestions)
-    return defaultCalibration
-  }
-
-  return buildCalibration(profiles, sourceQuestions)
-}
-
-const withDisplayScores = (
-  ranked: readonly RawRankedMob[],
-  calibration: Map<string, CalibrationEntry>,
-  hasSignal: boolean,
-): RankedMob[] =>
-  ranked.map((candidate) => {
-    const entry = calibration.get(candidate.profile.code)
-    return {
-      ...candidate,
-      displayScore: hasSignal && entry ? clamp01(candidate.score / entry.idealScore) : 0,
+const sortRanked = (ranked: RankedMob[]): RankedMob[] =>
+  ranked.sort((left, right) => {
+    const scoreDelta = right.score - left.score
+    if (Math.abs(scoreDelta) > EPSILON) {
+      return scoreDelta
     }
+    return left.profile.order - right.profile.order
   })
 
 export const rankMobs = (
   vector: TraitVector,
   profiles: readonly MobProfile[] = mobProfiles,
-  sourceQuestions: readonly Question[] = defaultQuestions,
-): RankedMob[] =>
-  withDisplayScores(
-    rankRawMobs(vector, profiles),
-    calibrationFor(profiles, sourceQuestions),
-    vectorLength(vector) >= EPSILON,
+): RankedMob[] => {
+  const hasSignal = vectorLength(vector) >= EPSILON
+  return sortRanked(
+    profiles.map((profile) => {
+      const score = cosineSimilarity(vector, profile.traits)
+      return {
+        profile,
+        score,
+        displayScore: hasSignal ? clamp01(score) : 0,
+      }
+    }),
   )
+}
+
+const rankAnswerAgreement = (
+  answers: AnswerMap,
+  sourceQuestions: readonly Question[],
+  profiles: readonly MobProfile[],
+): RankedMob[] => {
+  const completedQuestions = sourceQuestions.filter((question) => answers[question.id])
+  const hasAnswers = completedQuestions.length > 0
+
+  return sortRanked(
+    profiles.map((profile) => {
+      const expected = answerPathForMob(profile, sourceQuestions)
+      const matchingAnswers = completedQuestions.reduce(
+        (total, question) => total + Number(answers[question.id] === expected[question.id]),
+        0,
+      )
+      const score = hasAnswers ? matchingAnswers / completedQuestions.length : 0
+      return {
+        profile,
+        score,
+        displayScore: calibratedMatchScore(score, hasAnswers),
+      }
+    }),
+  )
+}
 
 export const scoreAnswers = (
   answers: AnswerMap,
@@ -148,10 +121,7 @@ export const scoreAnswers = (
   profiles: readonly MobProfile[] = mobProfiles,
 ): ScoredResult => {
   const vector = vectorFromAnswers(answers, sourceQuestions)
-  const rawRanked = rankRawMobs(vector, profiles)
-  const hasSignal = vectorLength(vector) >= EPSILON
-  const calibration = calibrationFor(profiles, sourceQuestions)
-  const ranked = withDisplayScores(rawRanked, calibration, hasSignal)
+  const ranked = rankAnswerAgreement(answers, sourceQuestions, profiles)
   const completedCount = sourceQuestions.filter((question) => answers[question.id]).length
   const top = ranked[0]
   const runnerUp = ranked[1]
@@ -160,9 +130,12 @@ export const scoreAnswers = (
     throw new Error('No mob profiles are available for scoring.')
   }
 
-  const topCalibration = calibration.get(top.profile.code)
-  const rawGap = runnerUp ? top.score - runnerUp.score : 0
-  const confidence = hasSignal && topCalibration ? clamp01(rawGap / topCalibration.idealGap) : 0
+  const completion = sourceQuestions.length > 0 ? completedCount / sourceQuestions.length : 0
+  const coherence = clamp01((top.score - 0.5) / 0.5)
+  const voteGap = runnerUp ? Math.max(0, (top.score - runnerUp.score) * completedCount) : 0
+  const marginStrength = Math.tanh(voteGap * 0.55)
+  const confidence =
+    completedCount > 0 ? clamp01(completion * (0.45 + 0.3 * coherence + 0.25 * marginStrength)) : 0
 
   return {
     top,

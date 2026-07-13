@@ -27,6 +27,7 @@ export interface QuestionOption {
   id: 'a' | 'b'
   label: string
   weights: TraitVector
+  targetMobCodes: readonly string[]
 }
 
 export interface Question {

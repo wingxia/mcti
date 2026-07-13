@@ -15,15 +15,7 @@ type MobRow = readonly [
 const wikiUrl = (title: string) =>
   `https://zh.minecraft.wiki/w/${encodeURIComponent(title).replaceAll('%20', '_')}`
 
-export const affinityKey = (code: string) => `affinity:${code}`
-
-const toTraits = (code: string, entries: readonly TraitEntry[]): TraitVector => {
-  const traits: TraitVector = { [affinityKey(code)]: 5 }
-  for (const [key, value] of entries) {
-    traits[key] = value
-  }
-  return traits
-}
+const toTraits = (entries: readonly TraitEntry[]): TraitVector => Object.fromEntries(entries)
 
 export const TRAIT_LABELS: Record<string, string> = {
   aggression: '主动出击',
@@ -121,9 +113,9 @@ const rows: readonly MobRow[] = [
     'Camel Husk',
     '骆驼尸壳',
     'friendly',
-    '风沙里的耐旱影子',
-    '带有亡灵气质的骆驼变体，像把长途耐受留在荒地里。',
-    '我会把漫长路程扛下来，即使环境干燥也不轻易停步。',
+    '荒漠里的亡灵双骑',
+    '是不会在阳光下燃烧的亡灵骆驼，可载两名玩家并蓄力冲刺。',
+    '即使状态已经改变，我仍会载着同伴越过障碍继续赶路。',
     [
       ['resilience', 1],
       ['patience', 0.8],
@@ -163,14 +155,14 @@ const rows: readonly MobRow[] = [
     'Copper Golem',
     '铜傀儡',
     'friendly',
-    '会氧化的按钮实验家',
-    '由铜和南瓜构成，偏爱随机按铜按钮，时间久了会氧化。',
-    '我会尝试一个个按钮，让偶然性替我打开新局面。',
+    '会氧化的箱间分拣员',
+    '会从铜箱取出物品，再按内容分类放进普通箱或陷阱箱。',
+    '我会逐个检查容器，把同类东西送到真正合适的位置。',
     [
-      ['curiosity', 1],
-      ['mischief', 0.7],
-      ['patience', 0.5],
-      ['order', 0.4],
+      ['order', 1],
+      ['resource', 0.9],
+      ['patience', 0.7],
+      ['mobility', 0.4],
     ],
   ],
   [
@@ -220,8 +212,8 @@ const rows: readonly MobRow[] = [
     '快乐恶魂',
     'friendly',
     '云端的大型陪伴者',
-    '可被驾驭和结伴飞行，巨大却偏向温和陪伴。',
-    '我愿意把别人载到更高处，用轻松的方式跨越距离。',
+    '装备挽具后可载着多名玩家飞行，也会在高空和雨雪中恢复。',
+    '我愿意把大家一起载到更高处，让长距离变成共享旅程。',
     [
       ['social', 0.9],
       ['mobility', 0.9],
@@ -499,14 +491,14 @@ const rows: readonly MobRow[] = [
     'Sulfur Cube',
     '硫方怪',
     'friendly',
-    '弹跳的硫色块',
-    '方块状跳跃生物，靠接触造成压力感和存在感。',
-    '我会用弹跳和体积提醒大家，别忽略环境里的小危险。',
+    '会吸收材质的弹跳块',
+    '会吸收方块并按材质改变弹性、摩擦和浮力，受击时以弹跳代替受伤。',
+    '我会先吸收环境里的材料，再把压力变成新的运动方式。',
     [
-      ['mobility', 0.7],
-      ['resilience', 0.8],
-      ['spectacle', 0.6],
-      ['aggression', 0.5],
+      ['resilience', 0.9],
+      ['mobility', 0.8],
+      ['curiosity', 0.8],
+      ['resource', 0.6],
     ],
   ],
   [
@@ -667,14 +659,14 @@ const rows: readonly MobRow[] = [
     'Nautilus',
     '鹦鹉螺',
     'friendly',
-    '壳中游弋的古海心',
-    '水生壳类生物，行动和防护都围绕海洋环境展开。',
-    '我会把柔软想法藏在坚硬外壳里，只在合适水域展开。',
+    '披甲冲刺的深海坐骑',
+    '可用河豚驯服，装备鞍和鹦鹉螺铠后载人冲刺并让骑手保存氧气。',
+    '我会先建立信任，再带着同伴向水下目标加速冲刺。',
     [
       ['aquatic', 1],
-      ['protection', 0.7],
-      ['patience', 0.6],
-      ['caution', 0.6],
+      ['mobility', 0.9],
+      ['loyalty', 0.7],
+      ['protection', 0.6],
     ],
   ],
   [
@@ -737,14 +729,14 @@ const rows: readonly MobRow[] = [
     'Zombie Nautilus',
     '僵尸鹦鹉螺',
     'friendly',
-    '旧海壳里的亡灵余波',
-    '带有水生与亡灵双重气质，像从海底旧事里游出。',
-    '我会背着旧壳继续前进，即使状态改变也不丢掉方向。',
+    '不怕脱水的亡灵海骑',
+    '可被驯服、披甲和骑乘，水下冲刺更快，离水也不会受到脱水伤害。',
+    '即使离开熟悉水域，我仍会载着同伴保持速度和方向。',
     [
       ['aquatic', 0.9],
       ['resilience', 0.9],
-      ['caution', 0.5],
-      ['protection', 0.4],
+      ['mobility', 0.8],
+      ['protection', 0.5],
     ],
   ],
   [
@@ -920,8 +912,8 @@ const rows: readonly MobRow[] = [
     '焦骸',
     'hostile',
     '干热地带的灼骨射手',
-    '带干旱和亡灵气质的远程威胁，像被热风烘干的骷髅。',
-    '我会在干热空气里保持距离，把压力一点点烤到对面。',
+    '是生成在沙漠的骷髅变种，会从远处射出带虚弱效果的箭。',
+    '我会保持距离，用削弱对方的方式逐步取得主动。',
     [
       ['resilience', 0.8],
       ['aggression', 0.8],
@@ -1305,7 +1297,7 @@ export const mobProfiles: readonly MobProfile[] = rows.map(
     archetype,
     summary: `你的 MCTI 是 ${name}：${archetype}。${behavior}`,
     anchorChoice,
-    traits: toTraits(code, traitEntries),
+    traits: toTraits(traitEntries),
     source: WIKI_SOURCE,
     order,
   }),

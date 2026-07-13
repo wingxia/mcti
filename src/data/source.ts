@@ -2,8 +2,8 @@ import type { WikiSource } from '../types'
 
 export const WIKI_SOURCE: WikiSource = {
   pageId: 41,
-  revisionId: 1395881,
-  timestamp: '2026-07-01T09:25:19Z',
+  revisionId: 1405393,
+  timestamp: '2026-07-09T00:38:42Z',
   pageUrl: 'https://zh.minecraft.wiki/w/%E7%94%9F%E7%89%A9',
 }
 
