@@ -1,10 +1,23 @@
 import './style.css'
+import {
+  answerAdaptiveQuestion,
+  createAdaptiveSession,
+  evaluateAdaptiveSession,
+  MIN_ADAPTIVE_QUESTIONS,
+  restoreAdaptiveSession,
+  sessionFromLegacyAnswers,
+} from './adaptive'
 import { MOB_PREVIEW_IMAGE, WIKI_SOURCE } from './data/source'
 import { mobProfiles, TRAIT_LABELS } from './data/mobs'
 import { questions } from './data/questions'
-import { scoreAnswers } from './score'
-import { clearAnswers, loadAnswers, saveAnswers } from './storage'
-import type { AnswerMap, MobProfile, RankedMob, TraitVector } from './types'
+import {
+  clearAdaptiveSession,
+  loadAdaptiveSession,
+  loadAnswers,
+  saveAdaptiveSession,
+  STORAGE_KEY,
+} from './storage'
+import type { AdaptiveSession, MobProfile, RankedMob, TraitVector } from './types'
 
 const root = document.querySelector<HTMLDivElement>('#app')
 
@@ -16,9 +29,26 @@ const app = root
 const appHomeHref = import.meta.env.BASE_URL || '/'
 
 const questionIds = questions.map((question) => question.id)
-let answers: AnswerMap = loadAnswers(window.localStorage, questionIds)
-let currentIndex = Math.min(firstUnansweredIndex(), questions.length - 1)
-let resultMode = allAnswered()
+const legacyQuestionIds = questions.slice(0, 93).map((question) => question.id)
+const savedSession = loadAdaptiveSession(window.localStorage, questionIds)
+const legacyAnswers = savedSession ? {} : loadAnswers(window.localStorage, questionIds)
+const hasLegacyAnswers = Object.keys(legacyAnswers).length > 0
+let session: AdaptiveSession = savedSession
+  ? restoreAdaptiveSession(savedSession)
+  : hasLegacyAnswers
+    ? sessionFromLegacyAnswers(
+        legacyAnswers,
+        legacyQuestionIds.every((questionId) => legacyAnswers[questionId]),
+      )
+    : createAdaptiveSession()
+if (hasLegacyAnswers) {
+  window.localStorage.removeItem(STORAGE_KEY)
+}
+saveAdaptiveSession(window.localStorage, session)
+
+const questionById = new Map(questions.map((question) => [question.id, question]))
+let currentIndex = Math.min(firstUnansweredIndex(), session.questionOrder.length - 1)
+let resultMode = session.completed
 let transientMessage = ''
 let pendingAdvanceTimer: number | undefined
 
@@ -32,16 +62,21 @@ const escapeHtml = (value: string): string =>
     .replaceAll('"', '&quot;')
 
 function firstUnansweredIndex(): number {
-  const index = questions.findIndex((question) => !answers[question.id])
-  return index === -1 ? questions.length - 1 : index
+  const index = session.questionOrder.findIndex((questionId) => !session.answers[questionId])
+  return index === -1 ? Math.max(0, session.questionOrder.length - 1) : index
 }
 
-function allAnswered(): boolean {
-  return questions.every((question) => answers[question.id])
+function currentQuestion() {
+  const questionId = session.questionOrder[currentIndex]
+  const question = questionById.get(questionId)
+  if (!question) {
+    throw new Error(`Missing adaptive question ${questionId}.`)
+  }
+  return question
 }
 
 function answeredCount(): number {
-  return questions.filter((question) => answers[question.id]).length
+  return Object.keys(session.answers).length
 }
 
 function categoryLabel(category: MobProfile['category']): string {
@@ -66,17 +101,17 @@ function clearPendingAdvance(): void {
 }
 
 function advanceFromQuestion(questionId: string): void {
-  const question = questions[currentIndex]
-  if (question.id !== questionId || !answers[questionId]) {
+  const question = currentQuestion()
+  if (question.id !== questionId || !session.answers[questionId]) {
     return
   }
-  if (currentIndex < questions.length - 1) {
+  if (currentIndex < session.questionOrder.length - 1) {
     currentIndex += 1
     transientMessage = ''
     render()
     return
   }
-  if (allAnswered()) {
+  if (session.completed) {
     resultMode = true
     transientMessage = ''
     render()
@@ -92,11 +127,17 @@ function queueAutoAdvance(questionId: string): void {
 }
 
 function setAnswer(choice: 'a' | 'b', autoAdvance = false): void {
+  if (resultMode) return
   clearPendingAdvance()
-  const question = questions[currentIndex]
-  answers = { ...answers, [question.id]: choice }
-  saveAnswers(window.localStorage, answers)
-  transientMessage = ''
+  const question = currentQuestion()
+  const previousAnswer = session.answers[question.id]
+  const changedEarlierAnswer =
+    previousAnswer !== undefined &&
+    previousAnswer !== choice &&
+    currentIndex < session.questionOrder.length - 1
+  session = answerAdaptiveQuestion(session, question.id, choice)
+  saveAdaptiveSession(window.localStorage, session)
+  transientMessage = changedEarlierAnswer ? '已根据修改调整后续题目。' : ''
   render()
   if (autoAdvance) {
     queueAutoAdvance(question.id)
@@ -105,19 +146,20 @@ function setAnswer(choice: 'a' | 'b', autoAdvance = false): void {
 
 function goNext(): void {
   clearPendingAdvance()
-  if (!answers[questions[currentIndex].id]) {
+  const question = currentQuestion()
+  if (!session.answers[question.id]) {
     transientMessage = '先选一个更接近你的反应。'
     render()
     return
   }
-  advanceFromQuestion(questions[currentIndex].id)
+  advanceFromQuestion(question.id)
 }
 
 function goBack(): void {
   clearPendingAdvance()
   if (resultMode) {
     resultMode = false
-    currentIndex = questions.length - 1
+    currentIndex = Math.max(0, session.questionOrder.length - 1)
     render()
     return
   }
@@ -128,25 +170,34 @@ function goBack(): void {
 
 function restart(): void {
   clearPendingAdvance()
-  answers = {}
+  clearAdaptiveSession(window.localStorage)
+  session = createAdaptiveSession()
+  saveAdaptiveSession(window.localStorage, session)
   currentIndex = 0
   resultMode = false
   transientMessage = ''
-  clearAnswers(window.localStorage)
   history.replaceState(null, '', location.pathname)
   render()
 }
 
 function renderHeader(): string {
   const completed = answeredCount()
-  const percent = Math.round((completed / questions.length) * 100)
+  const percent = Math.round(Math.min(1, completed / MIN_ADAPTIVE_QUESTIONS) * 100)
+  const decision = evaluateAdaptiveSession(session)
+  const progressCopy = session.completed
+    ? `共完成 ${completed} 题`
+    : decision.phase === 'confirmation'
+      ? `${completed} 题 · 正在确认`
+      : completed >= MIN_ADAPTIVE_QUESTIONS
+        ? `${completed} 题 · 自适应`
+        : `${completed}/${MIN_ADAPTIVE_QUESTIONS}`
   return `
     <header class="topbar">
       <a class="brand" href="${escapeHtml(appHomeHref)}" aria-label="MCTI 首页">
         <span class="brand-mark" aria-hidden="true"></span>
         <span>MCTI</span>
       </a>
-      <div class="progress-copy" aria-live="polite">${completed}/${questions.length}</div>
+      <div class="progress-copy" aria-live="polite">${progressCopy}</div>
     </header>
     <div class="progress-track" aria-hidden="true">
       <span style="inline-size:${percent}%"></span>
@@ -155,8 +206,8 @@ function renderHeader(): string {
 }
 
 function renderQuestion(): void {
-  const question = questions[currentIndex]
-  const selected = answers[question.id]
+  const question = currentQuestion()
+  const selected = session.answers[question.id]
   const questionNumber = currentIndex + 1
   app.innerHTML = `
     <main class="app-shell">
@@ -235,15 +286,16 @@ function fallbackCopyText(text: string): boolean {
 }
 
 function renderResult(): void {
-  const result = scoreAnswers(answers)
+  const result = evaluateAdaptiveSession(session).score
   const profile = result.top.profile
   const traits = visibleTraits(profile.traits)
+  const limitedResult = session.stopReason === 'question_limit'
   history.replaceState(null, '', `#result=${encodeURIComponent(profile.code)}`)
   app.innerHTML = `
     <main class="app-shell">
       ${renderHeader()}
       <section class="result-surface" aria-labelledby="result-title">
-        <p class="eyebrow">${categoryLabel(profile.category)} / ${escapeHtml(profile.code)}</p>
+        <p class="eyebrow">${limitedResult ? '当前最接近 · ' : ''}${categoryLabel(profile.category)} / ${escapeHtml(profile.code)}</p>
         <h1 id="result-title">${escapeHtml(profile.name)}</h1>
         <p class="archetype">${escapeHtml(profile.archetype)}</p>
         <p class="summary">${escapeHtml(profile.summary)}</p>
@@ -253,6 +305,7 @@ function renderResult(): void {
         <div class="result-meta">
           <span>匹配度 ${Math.round(result.top.displayScore * 100)}%</span>
           <span>置信 ${Math.round(result.confidence * 100)}%</span>
+          <span>共 ${result.completedCount} 题</span>
         </div>
         <div class="alternatives">
           <h2>接近结果</h2>
@@ -332,11 +385,11 @@ function render(): void {
     ? mobProfiles.find((profile) => profile.code === sharedCode)
     : undefined
 
-  if (sharedProfile && !allAnswered()) {
+  if (sharedProfile && !session.completed) {
     renderSharedResult(sharedProfile)
     return
   }
-  if (resultMode && allAnswered()) {
+  if (resultMode && session.completed) {
     renderResult()
     return
   }

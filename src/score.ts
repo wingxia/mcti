@@ -1,9 +1,21 @@
-import type { AnswerMap, MobProfile, Question, QuestionOption, RankedMob, ScoredResult, TraitVector } from './types'
+import type {
+  AnswerMap,
+  MobProfile,
+  PairwiseEvidence,
+  Question,
+  QuestionOption,
+  RankedMob,
+  ScoredResult,
+  TraitVector,
+} from './types'
 import { mobProfiles } from './data/mobs'
 import { questions as defaultQuestions } from './data/questions'
 
 const EPSILON = 0.0000001
 const TARGET_BONUS = 3
+export const ITEM_RELIABILITY = 0.75
+export const RETEST_CHANGE_RATE = 0.12
+const answerPathCache = new WeakMap<MobProfile, WeakMap<readonly Question[], AnswerMap>>()
 
 const clamp01 = (value: number): number => Math.max(0, Math.min(1, value))
 
@@ -53,11 +65,19 @@ export const answerPathForMob = (
   target: MobProfile,
   sourceQuestions: readonly Question[] = defaultQuestions,
 ): AnswerMap => {
+  const cached = answerPathCache.get(target)?.get(sourceQuestions)
+  if (cached) {
+    return cached
+  }
+
   const answers: AnswerMap = {}
   for (const question of sourceQuestions) {
     const [first, second] = question.options
     answers[question.id] = optionFit(first, target) >= optionFit(second, target) ? 'a' : 'b'
   }
+  const profileCache = answerPathCache.get(target) ?? new WeakMap<readonly Question[], AnswerMap>()
+  profileCache.set(sourceQuestions, answers)
+  answerPathCache.set(target, profileCache)
   return answers
 }
 
@@ -66,6 +86,10 @@ const calibratedMatchScore = (rawScore: number, hasAnswers: boolean): number =>
 
 const sortRanked = (ranked: RankedMob[]): RankedMob[] =>
   ranked.sort((left, right) => {
+    const probabilityDelta = right.probability - left.probability
+    if (Math.abs(probabilityDelta) > EPSILON) {
+      return probabilityDelta
+    }
     const scoreDelta = right.score - left.score
     if (Math.abs(scoreDelta) > EPSILON) {
       return scoreDelta
@@ -85,6 +109,7 @@ export const rankMobs = (
         profile,
         score,
         displayScore: hasSignal ? clamp01(score) : 0,
+        probability: 0,
       }
     }),
   )
@@ -98,21 +123,96 @@ const rankAnswerAgreement = (
   const completedQuestions = sourceQuestions.filter((question) => answers[question.id])
   const hasAnswers = completedQuestions.length > 0
 
+  const candidates = profiles.map((profile) => {
+    const expected = answerPathForMob(profile, sourceQuestions)
+    const matchingAnswers = completedQuestions.reduce(
+      (total, question) => total + Number(answers[question.id] === expected[question.id]),
+      0,
+    )
+    const score = hasAnswers ? matchingAnswers / completedQuestions.length : 0
+    return {
+      profile,
+      score,
+      displayScore: calibratedMatchScore(score, hasAnswers),
+      logLikelihood: hasAnswers
+        ? matchingAnswers * Math.log(ITEM_RELIABILITY) +
+          (completedQuestions.length - matchingAnswers) * Math.log(1 - ITEM_RELIABILITY)
+        : 0,
+    }
+  })
+
+  const maxLogLikelihood = Math.max(...candidates.map((candidate) => candidate.logLikelihood))
+  const likelihoods = candidates.map((candidate) => Math.exp(candidate.logLikelihood - maxLogLikelihood))
+  const likelihoodTotal = likelihoods.reduce((total, likelihood) => total + likelihood, 0)
+
   return sortRanked(
-    profiles.map((profile) => {
-      const expected = answerPathForMob(profile, sourceQuestions)
-      const matchingAnswers = completedQuestions.reduce(
-        (total, question) => total + Number(answers[question.id] === expected[question.id]),
-        0,
-      )
-      const score = hasAnswers ? matchingAnswers / completedQuestions.length : 0
-      return {
-        profile,
-        score,
-        displayScore: calibratedMatchScore(score, hasAnswers),
-      }
-    }),
+    candidates.map(({ logLikelihood: _logLikelihood, ...candidate }, index) => ({
+      ...candidate,
+      probability: likelihoodTotal > EPSILON ? likelihoods[index] / likelihoodTotal : 0,
+    })),
   )
+}
+
+const pairwiseEvidence = (
+  top: RankedMob,
+  runnerUp: RankedMob | undefined,
+  answers: AnswerMap,
+  sourceQuestions: readonly Question[],
+): PairwiseEvidence => {
+  if (!runnerUp) {
+    return { decisiveCount: 0, topVotes: 0, runnerUpVotes: 0, margin: 0 }
+  }
+
+  const topPath = answerPathForMob(top.profile, sourceQuestions)
+  const runnerUpPath = answerPathForMob(runnerUp.profile, sourceQuestions)
+  let topVotes = 0
+  let runnerUpVotes = 0
+
+  for (const question of sourceQuestions) {
+    const answer = answers[question.id]
+    if (!answer || topPath[question.id] === runnerUpPath[question.id]) {
+      continue
+    }
+    if (answer === topPath[question.id]) {
+      topVotes += 1
+    } else {
+      runnerUpVotes += 1
+    }
+  }
+
+  return {
+    decisiveCount: topVotes + runnerUpVotes,
+    topVotes,
+    runnerUpVotes,
+    margin: topVotes - runnerUpVotes,
+  }
+}
+
+const retestWinProbability = (evidence: PairwiseEvidence): number => {
+  if (evidence.decisiveCount === 0) {
+    return 0
+  }
+
+  let distribution = [1]
+  for (let index = 0; index < evidence.decisiveCount; index += 1) {
+    const currentlySupportsTop = index < evidence.topVotes
+    const supportsTopAfterRetest = currentlySupportsTop
+      ? 1 - RETEST_CHANGE_RATE
+      : RETEST_CHANGE_RATE
+    const next = Array.from({ length: distribution.length + 1 }, () => 0)
+    for (let votes = 0; votes < distribution.length; votes += 1) {
+      next[votes] += distribution[votes] * (1 - supportsTopAfterRetest)
+      next[votes + 1] += distribution[votes] * supportsTopAfterRetest
+    }
+    distribution = next
+  }
+
+  const halfway = evidence.decisiveCount / 2
+  return distribution.reduce((total, probability, topVotes) => {
+    if (topVotes > halfway) return total + probability
+    if (topVotes === halfway) return total + probability * 0.5
+    return total
+  }, 0)
 }
 
 export const scoreAnswers = (
@@ -124,18 +224,21 @@ export const scoreAnswers = (
   const ranked = rankAnswerAgreement(answers, sourceQuestions, profiles)
   const completedCount = sourceQuestions.filter((question) => answers[question.id]).length
   const top = ranked[0]
-  const runnerUp = ranked[1]
 
   if (!top) {
     throw new Error('No mob profiles are available for scoring.')
   }
 
-  const completion = sourceQuestions.length > 0 ? completedCount / sourceQuestions.length : 0
-  const coherence = clamp01((top.score - 0.5) / 0.5)
-  const voteGap = runnerUp ? Math.max(0, (top.score - runnerUp.score) * completedCount) : 0
-  const marginStrength = Math.tanh(voteGap * 0.55)
+  const topRunnerUpEvidence = pairwiseEvidence(top, ranked[1], answers, sourceQuestions)
+  const retestProbabilities = ranked
+    .slice(1, 4)
+    .map((alternative) =>
+      retestWinProbability(pairwiseEvidence(top, alternative, answers, sourceQuestions)),
+    )
   const confidence =
-    completedCount > 0 ? clamp01(completion * (0.45 + 0.3 * coherence + 0.25 * marginStrength)) : 0
+    completedCount > 0 && retestProbabilities.length > 0
+      ? Math.min(...retestProbabilities)
+      : 0
 
   return {
     top,
@@ -144,6 +247,7 @@ export const scoreAnswers = (
     vector,
     completedCount,
     confidence,
+    topRunnerUpEvidence,
   }
 }
 

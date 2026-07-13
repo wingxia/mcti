@@ -4,9 +4,10 @@ import { questions } from '../src/data/questions'
 import { answerPathForMob, cosineSimilarity, scoreAnswers } from '../src/score'
 
 describe('MCTI scoring', () => {
-  it('locks the planned data size', () => {
+  it('locks the result count and keeps a larger adaptive question pool', () => {
     expect(mobProfiles).toHaveLength(89)
-    expect(questions).toHaveLength(93)
+    expect(questions.length).toBeGreaterThanOrEqual(93)
+    expect(new Set(questions.map((question) => question.id)).size).toBe(questions.length)
   })
 
   it('uses deterministic ordering for an empty vector', () => {
@@ -15,6 +16,7 @@ describe('MCTI scoring', () => {
     expect(result.top.profile.code).toBe('Allay')
     expect(result.top.score).toBe(0)
     expect(result.top.displayScore).toBe(0)
+    expect(result.top.probability).toBeCloseTo(1 / mobProfiles.length)
     expect(result.confidence).toBe(0)
   })
 

@@ -42,6 +42,14 @@ export interface RankedMob {
   profile: MobProfile
   score: number
   displayScore: number
+  probability: number
+}
+
+export interface PairwiseEvidence {
+  decisiveCount: number
+  topVotes: number
+  runnerUpVotes: number
+  margin: number
 }
 
 export interface ScoredResult {
@@ -51,4 +59,33 @@ export interface ScoredResult {
   vector: TraitVector
   completedCount: number
   confidence: number
+  topRunnerUpEvidence: PairwiseEvidence
+}
+
+export type AdaptivePhase = 'foundation' | 'adaptive' | 'confirmation' | 'complete'
+
+export type AdaptiveStopReason = 'threshold_met' | 'question_limit' | 'legacy_complete'
+
+export interface AdaptiveConfirmation {
+  targetCode: string
+  alternativeCodes: string[]
+  questionIds: string[]
+}
+
+export interface AdaptiveSession {
+  version: 2
+  answers: AnswerMap
+  questionOrder: string[]
+  topHistory: string[]
+  confirmation: AdaptiveConfirmation | null
+  completed: boolean
+  stopReason?: AdaptiveStopReason
+}
+
+export interface AdaptiveDecision {
+  phase: AdaptivePhase
+  nextQuestionId?: string
+  shouldStop: boolean
+  stopReason?: AdaptiveStopReason
+  score: ScoredResult
 }
