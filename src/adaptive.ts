@@ -12,7 +12,8 @@ import type {
 
 export const MIN_ADAPTIVE_QUESTIONS = 20
 export const TYPICAL_ADAPTIVE_QUESTIONS = 60
-export const MAX_ADAPTIVE_QUESTIONS = 93
+export const CORE_ADAPTIVE_QUESTIONS = 92
+export const MAX_ADAPTIVE_QUESTIONS = 143
 export const MATCH_THRESHOLD = 0.85
 export const CONFIDENCE_THRESHOLD = 0.85
 export const STABLE_TOP_STEPS = 3
@@ -86,7 +87,11 @@ const selectQuestion = (
   alternativeCodes: readonly string[] = [],
 ): Question | undefined => {
   const answeredIds = new Set(Object.keys(session.answers))
-  const available = questions.filter((question) => !answeredIds.has(question.id))
+  const facetItemsAvailable = score.completedCount >= MIN_ADAPTIVE_QUESTIONS
+  const available = questions.filter(
+    (question) =>
+      !answeredIds.has(question.id) && (facetItemsAvailable || question.tier === 'core'),
+  )
   if (available.length === 0) {
     return undefined
   }
@@ -300,6 +305,16 @@ export const restoreAdaptiveSession = (source: AdaptiveSession): AdaptiveSession
     topHistory: [],
     confirmation,
   }
+  const completedCount = Object.keys(answers).length
+  if (
+    normalized.completed &&
+    normalized.stopReason === 'question_limit' &&
+    completedCount < MAX_ADAPTIVE_QUESTIONS
+  ) {
+    normalized.completed = false
+    normalized.stopReason = undefined
+    normalized.confirmation = null
+  }
   if (normalized.completed || questionOrder.some((questionId) => !answers[questionId])) {
     return { ...normalized, topHistory: rebuildTopHistory(normalized) }
   }
@@ -385,7 +400,9 @@ export const evaluateAdaptiveSession = (session: AdaptiveSession): AdaptiveDecis
       ? 'confirmation'
       : score.completedCount < MIN_ADAPTIVE_QUESTIONS
         ? 'foundation'
-        : 'adaptive'
+        : score.completedCount >= CORE_ADAPTIVE_QUESTIONS
+          ? 'deepening'
+          : 'adaptive'
 
   return {
     phase,

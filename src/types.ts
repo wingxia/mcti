@@ -30,9 +30,12 @@ export interface QuestionOption {
   targetMobCodes: readonly string[]
 }
 
+export type QuestionTier = 'core' | 'facet'
+
 export interface Question {
   id: string
   prompt: string
+  tier: QuestionTier
   options: readonly [QuestionOption, QuestionOption]
 }
 
@@ -62,7 +65,12 @@ export interface ScoredResult {
   topRunnerUpEvidence: PairwiseEvidence
 }
 
-export type AdaptivePhase = 'foundation' | 'adaptive' | 'confirmation' | 'complete'
+export type AdaptivePhase =
+  | 'foundation'
+  | 'adaptive'
+  | 'confirmation'
+  | 'deepening'
+  | 'complete'
 
 export type AdaptiveStopReason = 'threshold_met' | 'question_limit' | 'legacy_complete'
 

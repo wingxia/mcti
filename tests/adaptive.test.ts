@@ -2,14 +2,19 @@ import { describe, expect, it } from 'vitest'
 import {
   answerAdaptiveQuestion,
   CONFIRMATION_QUESTIONS,
+  CORE_ADAPTIVE_QUESTIONS,
   createAdaptiveSession,
   evaluateAdaptiveSession,
   idealAnswerFor,
   MAX_ADAPTIVE_QUESTIONS,
   MIN_ADAPTIVE_QUESTIONS,
+  restoreAdaptiveSession,
 } from '../src/adaptive'
 import { mobProfiles } from '../src/data/mobs'
+import { questions } from '../src/data/questions'
 import type { AdaptiveSession } from '../src/types'
+
+const questionById = new Map(questions.map((question) => [question.id, question]))
 
 const percentile = (values: readonly number[], ratio: number): number => {
   const sorted = [...values].sort((left, right) => left - right)
@@ -34,6 +39,21 @@ const completePath = (
 }
 
 describe('adaptive assessment', () => {
+  it('keeps the foundation in the core pool before opening facet questions', () => {
+    let session = createAdaptiveSession()
+    while (Object.keys(session.answers).length < MIN_ADAPTIVE_QUESTIONS) {
+      const questionId = evaluateAdaptiveSession(session).nextQuestionId
+      if (!questionId) throw new Error('Foundation path did not receive a next question.')
+      session = answerAdaptiveQuestion(session, questionId, idealAnswerFor('Cow', questionId))
+    }
+
+    expect(
+      session.questionOrder
+        .slice(0, MIN_ADAPTIVE_QUESTIONS)
+        .every((questionId) => questionById.get(questionId)?.tier === 'core'),
+    ).toBe(true)
+  })
+
   it('returns every ideal mob path efficiently after confirmation', () => {
     const lengths = mobProfiles.map((profile) => {
       const session = completePath(profile.code)
@@ -73,7 +93,7 @@ describe('adaptive assessment', () => {
     expect(results.filter((result) => result.correct).length / results.length).toBeGreaterThanOrEqual(0.95)
     expect(percentile(results.map((result) => result.length), 0.5)).toBeLessThanOrEqual(40)
     expect(percentile(results.map((result) => result.length), 0.9)).toBeLessThanOrEqual(60)
-  }, 15_000)
+  }, 30_000)
 
   it('does not award early high confidence to random answer paths', () => {
     let seed = 77
@@ -98,7 +118,29 @@ describe('adaptive assessment', () => {
 
     const earlyHighRate = stopReasons.filter((reason) => reason === 'threshold_met').length / stopReasons.length
     expect(earlyHighRate).toBeLessThanOrEqual(0.05)
-  }, 15_000)
+  }, 30_000)
+
+  it('reopens an old low-confidence 93-question limit for deeper assessment', () => {
+    const coreQuestionIds = questions.slice(0, 93).map((question) => question.id)
+    expect(coreQuestionIds).toHaveLength(CORE_ADAPTIVE_QUESTIONS + 1)
+    const answers = Object.fromEntries(
+      coreQuestionIds.map((questionId) => [questionId, 'a' as const]),
+    )
+    const restored = restoreAdaptiveSession({
+      version: 2,
+      answers,
+      questionOrder: coreQuestionIds,
+      topHistory: [],
+      confirmation: null,
+      completed: true,
+      stopReason: 'question_limit',
+    })
+
+    expect(restored.completed).toBe(false)
+    expect(restored.stopReason).toBeUndefined()
+    expect(evaluateAdaptiveSession(restored).phase).toBe('deepening')
+    expect(evaluateAdaptiveSession(restored).nextQuestionId).toBeDefined()
+  })
 
   it('selects deterministically without repeating questions', () => {
     const run = (): string[] => {

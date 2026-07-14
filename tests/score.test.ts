@@ -4,9 +4,11 @@ import { questions } from '../src/data/questions'
 import { answerPathForMob, cosineSimilarity, scoreAnswers } from '../src/score'
 
 describe('MCTI scoring', () => {
-  it('locks the result count and keeps a larger adaptive question pool', () => {
+  it('locks the result count and keeps a Step-II-depth adaptive question pool', () => {
     expect(mobProfiles).toHaveLength(89)
-    expect(questions.length).toBeGreaterThanOrEqual(93)
+    expect(questions).toHaveLength(143)
+    expect(questions.filter((question) => question.tier === 'core')).toHaveLength(92)
+    expect(questions.filter((question) => question.tier === 'facet')).toHaveLength(51)
     expect(new Set(questions.map((question) => question.id)).size).toBe(questions.length)
   })
 

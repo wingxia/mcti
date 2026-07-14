@@ -1,11 +1,14 @@
 import './style.css'
 import {
   answerAdaptiveQuestion,
+  CORE_ADAPTIVE_QUESTIONS,
   createAdaptiveSession,
   evaluateAdaptiveSession,
+  MAX_ADAPTIVE_QUESTIONS,
   MIN_ADAPTIVE_QUESTIONS,
   restoreAdaptiveSession,
   sessionFromLegacyAnswers,
+  TYPICAL_ADAPTIVE_QUESTIONS,
 } from './adaptive'
 import { MOB_PREVIEW_IMAGE, WIKI_SOURCE } from './data/source'
 import { mobProfiles, TRAIT_LABELS } from './data/mobs'
@@ -180,17 +183,49 @@ function restart(): void {
   render()
 }
 
+function assessmentProgress(completed: number): number {
+  if (session.completed) return 100
+  if (completed < MIN_ADAPTIVE_QUESTIONS) {
+    return (completed / MIN_ADAPTIVE_QUESTIONS) * 55
+  }
+  if (completed < TYPICAL_ADAPTIVE_QUESTIONS) {
+    return (
+      55 +
+      ((completed - MIN_ADAPTIVE_QUESTIONS) /
+        (TYPICAL_ADAPTIVE_QUESTIONS - MIN_ADAPTIVE_QUESTIONS)) *
+        25
+    )
+  }
+  if (completed < CORE_ADAPTIVE_QUESTIONS) {
+    return (
+      80 +
+      ((completed - TYPICAL_ADAPTIVE_QUESTIONS) /
+        (CORE_ADAPTIVE_QUESTIONS - TYPICAL_ADAPTIVE_QUESTIONS)) *
+        12
+    )
+  }
+  return Math.min(
+    100,
+    92 +
+      ((completed - CORE_ADAPTIVE_QUESTIONS) /
+        (MAX_ADAPTIVE_QUESTIONS - CORE_ADAPTIVE_QUESTIONS)) *
+        8,
+  )
+}
+
 function renderHeader(): string {
   const completed = answeredCount()
-  const percent = Math.round(Math.min(1, completed / MIN_ADAPTIVE_QUESTIONS) * 100)
   const decision = evaluateAdaptiveSession(session)
+  const percent = assessmentProgress(completed)
   const progressCopy = session.completed
     ? `共完成 ${completed} 题`
-    : decision.phase === 'confirmation'
-      ? `${completed} 题 · 正在确认`
-      : completed >= MIN_ADAPTIVE_QUESTIONS
-        ? `${completed} 题 · 自适应`
-        : `${completed}/${MIN_ADAPTIVE_QUESTIONS}`
+    : completed >= CORE_ADAPTIVE_QUESTIONS
+      ? `${completed} 题 · 深入辨析`
+      : decision.phase === 'confirmation'
+        ? `${completed} 题 · 正在确认`
+        : completed >= MIN_ADAPTIVE_QUESTIONS
+          ? `${completed} 题 · 缩小范围`
+          : `${completed}/${MIN_ADAPTIVE_QUESTIONS} · 建立轮廓`
   return `
     <header class="topbar">
       <a class="brand" href="${escapeHtml(appHomeHref)}" aria-label="MCTI 首页">
@@ -209,6 +244,15 @@ function renderQuestion(): void {
   const question = currentQuestion()
   const selected = session.answers[question.id]
   const questionNumber = currentIndex + 1
+  const completed = answeredCount()
+  const phaseLabel =
+    completed >= CORE_ADAPTIVE_QUESTIONS
+      ? '深入辨析'
+      : evaluateAdaptiveSession(session).phase === 'confirmation'
+        ? '候选确认'
+        : completed >= MIN_ADAPTIVE_QUESTIONS
+          ? '自适应辨析'
+          : '基础倾向'
   app.innerHTML = `
     <main class="app-shell">
       ${renderHeader()}
@@ -216,7 +260,7 @@ function renderQuestion(): void {
         <div class="mob-preview">
           <img src="${MOB_PREVIEW_IMAGE}" alt="Minecraft 生物预览" loading="lazy">
         </div>
-        <p class="eyebrow">第 ${questionNumber} 题</p>
+        <p class="eyebrow">${phaseLabel} · 第 ${questionNumber} 题</p>
         <h1 id="question-title">${escapeHtml(question.prompt)}</h1>
         <div class="options" role="radiogroup" aria-labelledby="question-title">
           ${question.options

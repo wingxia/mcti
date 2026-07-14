@@ -1,4 +1,4 @@
-import type { Question, QuestionOption, TraitVector } from '../types'
+import type { Question, QuestionOption, QuestionTier, TraitVector } from '../types'
 import { mobProfiles } from './mobs'
 
 type ChoiceBlueprint = {
@@ -41,9 +41,10 @@ const option = (id: 'a' | 'b', label: string, weights: TraitVector): QuestionOpt
 const weights = (entries: readonly (readonly [string, number])[]): TraitVector =>
   Object.fromEntries(entries)
 
-const buildQuestion = (question: QuestionBlueprint): Question => ({
+const buildQuestion = (question: QuestionBlueprint, tier: QuestionTier): Question => ({
   id: question.id,
   prompt: question.prompt,
+  tier,
   options: [
     option('a', question.options[0].label, question.options[0].weights),
     option('b', question.options[1].label, question.options[1].weights),
@@ -2410,14 +2411,135 @@ const adaptiveTieBreakerBlueprints: readonly QuestionBlueprint[] = [
     '像焦骸保持远程并射出虚弱之箭一样，在接触前削弱攻击。',
     weights([['caution', 0.9], ['resource', 0.8], ['order', 0.6]]),
   ),
+  directTieBreaker(
+    'q130-milk-or-wool',
+    '需要长期提供一种日常补给时，你更接近哪种循环？',
+    '像牛可以反复用桶收集牛奶一样，准备好容器就稳定交付。',
+    weights([['resource', 1], ['patience', 0.8], ['nurture', 0.5]]),
+    '像绵羊剪毛后吃草重新长出羊毛一样，恢复之后再提供下一批材料。',
+    weights([['resource', 0.9], ['resilience', 0.8], ['patience', 0.6]]),
+  ),
+  directTieBreaker(
+    'q131-steady-or-colorful-supply',
+    '同一种资源也能做出个人风格时，你更像哪一边？',
+    '像牛持续提供牛奶一样，把可靠和一致放在第一位。',
+    weights([['order', 0.9], ['resource', 0.8], ['patience', 0.6]]),
+    '像绵羊的羊毛可以染成不同颜色一样，愿意让产出带上明显变化。',
+    weights([['spectacle', 0.9], ['resource', 0.7], ['curiosity', 0.6]]),
+  ),
+  directTieBreaker(
+    'q132-wheat-or-grass-reset',
+    '完成一轮工作后，你怎样回到可继续投入的状态？',
+    '像牛跟随小麦并保持稳定节奏一样，从明确补给中重新集中。',
+    weights([['order', 0.8], ['social', 0.6], ['resource', 0.6]]),
+    '像绵羊吃草后长回羊毛一样，用一段安静恢复换来新的产出。',
+    weights([['nurture', 0.9], ['resilience', 0.8], ['patience', 0.7]]),
+  ),
+  directTieBreaker(
+    'q133-owner-or-crowd-bond',
+    '你加入一场冲突时，关系基础更接近哪一种？',
+    '像狼因驯服关系跟随主人并协同攻击一样，为具体信任对象行动。',
+    weights([['loyalty', 1], ['protection', 0.8], ['social', 0.5]]),
+    '像僵尸猪灵在同类受击后共同反击一样，为被触发的群体边界行动。',
+    weights([['social', 1], ['aggression', 0.8], ['resilience', 0.5]]),
+  ),
+  directTieBreaker(
+    'q134-care-or-shared-anger',
+    '紧张结束后，你更像怎样维持关系？',
+    '像狼可以被喂食恢复并穿戴狼铠一样，接受照料后继续陪伴守护。',
+    weights([['loyalty', 1], ['nurture', 0.8], ['protection', 0.7]]),
+    '像僵尸猪灵会把受击后的敌意传给附近同类一样，让群体记住边界。',
+    weights([['social', 0.9], ['caution', 0.8], ['aggression', 0.7]]),
+  ),
+  directTieBreaker(
+    'q135-command-or-trigger',
+    '同伴开始行动时，你更常因为什么一起跟上？',
+    '像狼响应主人的目标一样，因为清楚知道自己在支持谁。',
+    weights([['loyalty', 1], ['order', 0.7], ['protection', 0.6]]),
+    '像僵尸猪灵因任何同类被攻击而聚集一样，因为共同条件已经触发。',
+    weights([['social', 1], ['aggression', 0.7], ['spectacle', 0.5]]),
+  ),
+  directTieBreaker(
+    'q136-volley-or-crystal-cycle',
+    '需要长时间控制战场时，你更依靠什么循环？',
+    '像烈焰人悬浮蓄势后连续发射火球一样，用固定齐射窗口压制。',
+    weights([['order', 0.9], ['aggression', 0.8], ['patience', 0.6]]),
+    '像末影龙绕场飞行并借末地水晶恢复一样，把移动和恢复连成循环。',
+    weights([['mobility', 1], ['resilience', 0.8], ['spectacle', 0.6]]),
+  ),
+  directTieBreaker(
+    'q137-summoned-or-returning-boss',
+    '一场大行动以什么方式开始，更符合你的风格？',
+    '像凋灵由特定结构召唤并在蓄力后爆发一样，由准备好的条件启动。',
+    weights([['order', 0.9], ['spectacle', 0.9], ['aggression', 0.7]]),
+    '像末影龙守在末地主岛并可通过末地水晶复活一样，回到自己的主场。',
+    weights([['resilience', 1], ['mobility', 0.8], ['independence', 0.6]]),
+  ),
+  directTieBreaker(
+    'q138-split-or-charge',
+    '正面受阻后，你更可能怎样继续制造压力？',
+    '像岩浆怪被击败后分裂成更小个体一样，把一个问题拆成多路继续。',
+    weights([['resilience', 1], ['mobility', 0.7], ['mischief', 0.6]]),
+    '像劫掠兽在袭击中冲撞并破坏作物一样，保持体量直接推开阻挡。',
+    weights([['aggression', 1], ['spectacle', 0.8], ['resilience', 0.5]]),
+  ),
+  directTieBreaker(
+    'q139-fireline-or-lava-leap',
+    '在下界环境中推进时，你更接近哪种移动火力？',
+    '像烈焰人悬浮守住射界并远程发射火球一样，维持距离和火力线。',
+    weights([['aggression', 0.9], ['order', 0.8], ['patience', 0.6]]),
+    '像岩浆怪在熔岩环境中不断跳跃逼近一样，用弹跳改变接触距离。',
+    weights([['mobility', 1], ['resilience', 0.8], ['aggression', 0.5]]),
+  ),
+  directTieBreaker(
+    'q140-skulls-or-perch',
+    '优势出现后，你会怎样进入下一种强势状态？',
+    '像凋灵持续发射凋灵之首，并在生命降低后获得远程防护一样，边攻击边改变防线。',
+    weights([['aggression', 1], ['resilience', 0.9], ['resource', 0.5]]),
+    '像末影龙降落在返回传送门附近并喷吐龙息一样，回到关键位置控制区域。',
+    weights([['mobility', 0.9], ['spectacle', 0.8], ['order', 0.6]]),
+  ),
+  directTieBreaker(
+    'q141-ink-or-jungle-distance',
+    '突然被靠近时，你更像哪一种撤离方式？',
+    '像鱿鱼在水中受击后喷墨游开一样，先制造遮挡再离开。',
+    weights([['aquatic', 1], ['stealth', 0.8], ['mobility', 0.5]]),
+    '像豹猫在丛林里避开突然靠近的玩家一样，提前拉开陆地距离。',
+    weights([['caution', 1], ['independence', 0.8], ['stealth', 0.5]]),
+  ),
+  directTieBreaker(
+    'q142-poison-or-vibration-hunt',
+    '看不清目标所在时，你更依靠什么锁定对方？',
+    '像沼骸从潮湿地带远程射出毒箭一样，守住视线和距离。',
+    weights([['caution', 0.9], ['aggression', 0.8], ['aquatic', 0.5]]),
+    '像监守者感知振动和气味并发出声波攻击一样，从环境变化追踪源头。',
+    weights([['stealth', 0.9], ['curiosity', 0.8], ['aggression', 0.7]]),
+  ),
+  directTieBreaker(
+    'q143-echo-or-treasure-guide',
+    '你给同伴提供线索时，更像哪一种方式？',
+    '像鹦鹉模仿附近生物声音并停在肩上一样，用声音提醒身边的人。',
+    weights([['social', 0.9], ['mischief', 0.8], ['curiosity', 0.6]]),
+    '像海豚给予游泳助力并带人寻找宝藏一样，直接领着同伴前往目标。',
+    weights([['aquatic', 0.9], ['mobility', 0.9], ['social', 0.7]]),
+  ),
 ]
 
-const allQuestionBlueprints = [...questionBlueprints, ...adaptiveTieBreakerBlueprints]
+export const questions: readonly Question[] = [
+  ...questionBlueprints.slice(0, 92).map((question) => buildQuestion(question, 'core')),
+  ...questionBlueprints.slice(92).map((question) => buildQuestion(question, 'facet')),
+  ...adaptiveTieBreakerBlueprints.map((question) => buildQuestion(question, 'facet')),
+]
 
-export const questions: readonly Question[] = allQuestionBlueprints.map(buildQuestion)
+if (questions.length !== 143) {
+  throw new Error(`Expected 143 MCTI questions, received ${questions.length}`)
+}
 
-if (questions.length < 93) {
-  throw new Error(`Expected at least 93 MCTI questions, received ${questions.length}`)
+if (
+  questions.filter((question) => question.tier === 'core').length !== 92 ||
+  questions.filter((question) => question.tier === 'facet').length !== 51
+) {
+  throw new Error('MCTI question tiers must contain 92 core and 51 facet items.')
 }
 
 if (new Set(questions.map((question) => question.id)).size !== questions.length) {

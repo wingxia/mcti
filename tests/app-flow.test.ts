@@ -80,12 +80,12 @@ describe('MCTI adaptive app flow', () => {
     await loadApp()
 
     const initial = storedSession()
-    expect(progress()).toBe('0/20')
+    expect(progress()).toBe('0/20 · 建立轮廓')
     expect(heading()).toBe(questionById.get(initial.questionOrder[0])?.prompt)
     expect(document.querySelector('[data-action="next"]')).toBeNull()
 
     answerButton('a').click()
-    expect(progress()).toBe('1/20')
+    expect(progress()).toBe('1/20 · 建立轮廓')
     expect(document.querySelector('.choice.is-selected')?.getAttribute('data-answer')).toBe('a')
 
     await vi.advanceTimersByTimeAsync(AUTO_ADVANCE_DELAY_MS)
@@ -151,5 +151,31 @@ describe('MCTI adaptive app flow', () => {
     expect(document.querySelector('.result-surface')).not.toBeNull()
     expect(storedSession().stopReason).toBe('legacy_complete')
     expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull()
+  })
+
+  it('continues an old low-confidence 93-question session in deepening mode', async () => {
+    const questionOrder = questions.slice(0, 93).map((question) => question.id)
+    const answers = Object.fromEntries(questionOrder.map((questionId) => [questionId, 'a']))
+    window.localStorage.setItem(
+      SESSION_STORAGE_KEY,
+      JSON.stringify({
+        version: 2,
+        answers,
+        questionOrder,
+        topHistory: [],
+        confirmation: null,
+        completed: true,
+        stopReason: 'question_limit',
+      } satisfies AdaptiveSession),
+    )
+
+    await loadApp()
+
+    const restored = storedSession()
+    const nextQuestionId = restored.questionOrder.find((questionId) => !restored.answers[questionId])
+    expect(progress()).toBe('93 题 · 深入辨析')
+    expect(restored.completed).toBe(false)
+    expect(questionById.get(nextQuestionId ?? '')?.tier).toBe('facet')
+    expect(heading()).toBe(questionById.get(nextQuestionId ?? '')?.prompt)
   })
 })
